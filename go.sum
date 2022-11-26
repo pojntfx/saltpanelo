@@ -1,0 +1,6 @@
+github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
+github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/pojntfx/dudirekta v0.2.0 h1:GoGZ6k+TNWHMMnnYt0rCCkfCjAUnyDEojBwRble/sds=
+github.com/pojntfx/dudirekta v0.2.0/go.mod h1:9yX/QIumlZhKrYpFAhLD96JbXAFuzPZJ/tTgqVlpTSk=
+github.com/teivah/broadcast v0.1.0 h1:UMs1tn8w20Xlnod+VbLbwH3dzEH2zfJy4lxdzZjQLL0=
+github.com/teivah/broadcast v0.1.0/go.mod h1:mXEgvXdYz2xUkQFARxI+jyX1MfCBwMDiGjIKSAsEq1g=
