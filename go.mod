@@ -2,7 +2,7 @@ module github.com/pojntfx/saltpanelo
 
 go 1.19
 
-require github.com/pojntfx/dudirekta v0.2.0
+require github.com/pojntfx/dudirekta v0.4.0
 
 require (
 	github.com/google/uuid v1.3.0 // indirect

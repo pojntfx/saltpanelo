@@ -14,18 +14,37 @@ import (
 func main() {
 	laddr := flag.String("laddr", ":1337", "Listen address")
 	timeout := flag.Duration("timeout", time.Second*10, "Time after which to assume that a call has timed out")
+	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	l := services.NewRouter(*verbose)
+	clients := 0
 	registry := rpc.NewRegistry(
-		services.Router{},
-		struct{}{},
+		l,
+		services.SwitchRemote{},
 		*timeout,
 		ctx,
+		&rpc.Options{
+			ResponseBufferLen: rpc.DefaultResponseBufferLen,
+			OnClientConnect: func(remoteID string) {
+				clients++
+
+				log.Printf("%v clients connected", clients)
+			},
+			OnClientDisconnect: func(remoteID string) {
+				clients--
+
+				log.Printf("%v clients connected", clients)
+
+				services.HandleClientDisconnect(l, remoteID)
+			},
+		},
 	)
+	l.Peers = registry.Peers
 
 	lis, err := net.Listen("tcp", *laddr)
 	if err != nil {
@@ -39,26 +58,18 @@ func main() {
 		func() {
 			conn, err := lis.Accept()
 			if err != nil {
+				log.Println("could not accept connection, continuing:", err)
+
 				return
 			}
 
-			clients := 0
-
 			go func() {
-				clients++
-
-				log.Printf("%v clients connected", clients)
-
 				defer func() {
-					clients--
-
 					_ = conn.Close()
 
 					if err := recover(); err != nil {
 						log.Printf("Client disconnected with error: %v", err)
 					}
-
-					log.Printf("%v clients connected", clients)
 				}()
 
 				if err := registry.Link(conn); err != nil {
