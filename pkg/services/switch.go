@@ -26,7 +26,7 @@ func NewSwitch(verbose bool) *Switch {
 
 func (s *Switch) TestRTT(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {
 	if s.verbose {
-		log.Println("Measuring RTT for raddr")
+		log.Println("Starting RTT tests for addrs", addrs)
 	}
 
 	rtts := []time.Duration{}
