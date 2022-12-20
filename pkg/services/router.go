@@ -15,7 +15,7 @@ var (
 )
 
 type RouterRemote struct {
-	RegisterSwitch func(ctx context.Context, addr string) (string, error)
+	RegisterSwitch func(ctx context.Context, addr string) error
 }
 
 func HandleClientDisconnect(router *Router, remoteID string) {
@@ -66,14 +66,14 @@ func (r *Router) onClientDisconnect(remoteID string) {
 	}
 }
 
-func (r *Router) RegisterSwitch(ctx context.Context, addr string) (string, error) {
+func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 	remoteID := rpc.GetRemoteID(ctx)
 
 	r.switchesLock.Lock()
 	defer r.switchesLock.Unlock()
 
 	if _, ok := r.switches[remoteID]; ok {
-		return "", ErrSwitchAlreadyRegistered
+		return ErrSwitchAlreadyRegistered
 	}
 
 	r.switches[remoteID] = switchMetadata{
@@ -94,14 +94,23 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) (string, error
 
 			r.switchesLock.Lock()
 			addrs := []string{}
-			for addr := range r.switches {
-				addrs = append(addrs, addr)
+			for id, sw := range r.switches {
+				// Don't test RTT to self
+				if id == remoteID {
+					continue
+				}
+
+				addrs = append(addrs, sw.addr)
 			}
 			r.switchesLock.Unlock()
 
 			for remoteID, peer := range r.Peers() {
 				if remoteID == rpc.GetRemoteID(ctx) {
 					found = true
+
+					if r.verbose {
+						log.Println("Starting RTT tests for switch with ID", remoteID)
+					}
 
 					rttTestResults, err := peer.TestRTT(ctx, r.rttTestTimeout, addrs)
 					if err != nil {
@@ -136,6 +145,10 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) (string, error
 
 					r.switchesLock.Unlock()
 
+					if r.verbose {
+						log.Println("Finished RTT tests for switch with ID", remoteID, ":", sm.rtts)
+					}
+
 					break
 				}
 			}
@@ -148,5 +161,5 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) (string, error
 		}
 	}()
 
-	return remoteID, nil
+	return nil
 }

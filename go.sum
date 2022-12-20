@@ -1,9 +1,7 @@
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/pojntfx/dudirekta v0.2.0 h1:GoGZ6k+TNWHMMnnYt0rCCkfCjAUnyDEojBwRble/sds=
-github.com/pojntfx/dudirekta v0.2.0/go.mod h1:9yX/QIumlZhKrYpFAhLD96JbXAFuzPZJ/tTgqVlpTSk=
-github.com/pojntfx/dudirekta v0.3.0 h1:1hz+sUDAGYGTnAYLFeAxdp93fnsIVnZkVdEcB0dBGQ4=
-github.com/pojntfx/dudirekta v0.3.0/go.mod h1:9yX/QIumlZhKrYpFAhLD96JbXAFuzPZJ/tTgqVlpTSk=
+github.com/pion/stun v0.3.5 h1:uLUCBCkQby4S1cf6CGuR9QrVOKcvUwFeemaC865QHDg=
+github.com/pion/stun v0.3.5/go.mod h1:gDMim+47EeEtfWogA37n6qXZS88L5V6LqFcf+DZA2UA=
 github.com/pojntfx/dudirekta v0.4.0 h1:is3iNa24SUMMaEb9J38XRlptTXGTjtHQlq2fzd4xlYs=
 github.com/pojntfx/dudirekta v0.4.0/go.mod h1:2G79XDOe1c3Nz3G+LQfiNZ5K/SS3b2TP1K9JyRt8woI=
 github.com/teivah/broadcast v0.1.0 h1:UMs1tn8w20Xlnod+VbLbwH3dzEH2zfJy4lxdzZjQLL0=
