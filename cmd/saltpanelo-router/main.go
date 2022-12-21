@@ -48,6 +48,8 @@ func main() {
 	)
 	l.Peers = registry.Peers
 
+	go services.HandleOpen(l)
+
 	lis, err := net.Listen("tcp", *laddr)
 	if err != nil {
 		panic(err)
