@@ -23,10 +23,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewRouter(*verbose, *rttTestInterval, *rttTestTimeout)
+	r := services.NewRouter(*verbose, *rttTestInterval, *rttTestTimeout)
 	clients := 0
 	registry := rpc.NewRegistry(
-		l,
+		r,
 		services.SwitchRemote{},
 		*timeout,
 		ctx,
@@ -42,13 +42,13 @@ func main() {
 
 				log.Printf("%v clients connected", clients)
 
-				services.HandleClientDisconnect(l, remoteID)
+				services.HandleClientDisconnect(r, remoteID)
 			},
 		},
 	)
-	l.Peers = registry.Peers
+	r.Peers = registry.Peers
 
-	go services.HandleOpen(l)
+	go services.HandleOpen(r)
 
 	lis, err := net.Listen("tcp", *laddr)
 	if err != nil {
