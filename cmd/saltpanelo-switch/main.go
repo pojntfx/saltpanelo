@@ -121,7 +121,7 @@ func main() {
 					defer func() {
 						_ = conn.Close()
 
-						if err := recover(); err != nil {
+						if err := recover(); err != nil && !utils.IsClosedErr(err) {
 							log.Printf("Client disconnected with error: %v", err)
 						}
 					}()
