@@ -13,16 +13,16 @@ import (
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1337", "Remote address (of router)")
-	laddr := flag.String("laddr", ":1339", "Listen address (of gateway)")
-	saddr := flag.String("saddr", ":1338", "Address (of switch) to advertise; leave hostname empty to resolve public IP using STUN")
-	timeout := flag.Duration("timeout", time.Second*10, "Time after which to assume that a call has timed out")
+	raddr := flag.String("raddr", "localhost:1337", "Remote address")
+	laddr := flag.String("laddr", ":1338", "Listen address")
+	aaddr := flag.String("aaddr", ":1338", "Listen address to advertise; leave hostname empty to resolve public IP using STUN")
+	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	stunAddr := flag.String("stun", "stun.l.google.com:19302", "STUN server address")
 
 	flag.Parse()
 
-	advertisedAddr, err := net.ResolveTCPAddr("tcp", *saddr)
+	advertisedAddr, err := net.ResolveTCPAddr("tcp", *aaddr)
 	if err != nil {
 		panic(err)
 	}
@@ -30,22 +30,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := services.NewSwitch(*verbose)
-	switchClients := 0
-	switchRegistry := rpc.NewRegistry(
-		s,
+	l := services.NewSwitch(*verbose)
+	clients := 0
+	registry := rpc.NewRegistry(
+		l,
 		services.RouterRemote{},
 		*timeout,
 		ctx,
 		&rpc.Options{
 			ResponseBufferLen: rpc.DefaultResponseBufferLen,
 			OnClientConnect: func(remoteID string) {
-				switchClients++
+				clients++
 
-				log.Printf("%v clients connected to switch", switchClients)
+				log.Printf("%v clients connected", clients)
 
 				go func() {
-					for candidate, peer := range s.Peers() {
+					for candidate, peer := range l.Peers() {
 						if remoteID == candidate {
 							if *verbose {
 								log.Println("Registering with switch with ID", remoteID)
@@ -71,36 +71,13 @@ func main() {
 				}()
 			},
 			OnClientDisconnect: func(remoteID string) {
-				switchClients--
+				clients--
 
-				log.Printf("%v clients connected to switch", switchClients)
+				log.Printf("%v clients connected", clients)
 			},
 		},
 	)
-	s.Peers = switchRegistry.Peers
-
-	g := services.NewGateway(*verbose)
-	gatewayClients := 0
-	gatewayRegistry := rpc.NewRegistry(
-		g,
-		services.RouterRemote{},
-		*timeout,
-		ctx,
-		&rpc.Options{
-			ResponseBufferLen: rpc.DefaultResponseBufferLen,
-			OnClientConnect: func(remoteID string) {
-				gatewayClients++
-
-				log.Printf("%v clients connected to gateway", gatewayClients)
-			},
-			OnClientDisconnect: func(remoteID string) {
-				gatewayClients--
-
-				log.Printf("%v clients connected to gateway", gatewayClients)
-			},
-		},
-	)
-	s.Peers = gatewayRegistry.Peers
+	l.Peers = registry.Peers
 
 	errs := make(chan error)
 
@@ -113,9 +90,9 @@ func main() {
 		}
 		defer conn.Close()
 
-		log.Println("Switch connected to", conn.RemoteAddr())
+		log.Println("Connected to", conn.RemoteAddr())
 
-		if err := switchRegistry.Link(conn); err != nil {
+		if err := registry.Link(conn); err != nil {
 			errs <- err
 
 			return
@@ -125,13 +102,11 @@ func main() {
 	go func() {
 		lis, err := net.Listen("tcp", *laddr)
 		if err != nil {
-			errs <- err
-
-			return
+			panic(err)
 		}
 		defer lis.Close()
 
-		log.Println("Gateway listening on", lis.Addr())
+		log.Println("Listening on", lis.Addr())
 
 		for {
 			func() {
@@ -151,17 +126,19 @@ func main() {
 						}
 					}()
 
-					if err := gatewayRegistry.Link(conn); err != nil {
-						errs <- err
-
-						return
+					if err := utils.HandleTestConn(*verbose, conn); err != nil {
+						panic(err)
 					}
 				}()
 			}()
 		}
 	}()
 
-	for range errs {
+	for err := range errs {
+		if err == nil {
+			return
+		}
+
 		panic(err)
 	}
 }
