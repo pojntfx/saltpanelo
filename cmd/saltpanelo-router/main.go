@@ -13,20 +13,30 @@ import (
 
 func main() {
 	laddr := flag.String("laddr", ":1337", "Listen address")
-	timeout := flag.Duration("timeout", time.Second*10, "Time after which to assume that a call has timed out")
+	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
-	rttTestInterval := flag.Duration("rtt-test-interval", time.Second*10, "Interval in which to refresh RTT values in topology")
-	rttTestTimeout := flag.Duration("rtt-test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
+	latencyTestInterval := flag.Duration("latency-test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
+	latencyTestTimeout := flag.Duration("latency-test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
+	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
+	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	r := services.NewRouter(*verbose, *rttTestInterval, *rttTestTimeout)
+	l := services.NewRouter(
+		*verbose,
+
+		*latencyTestInterval,
+		*latencyTestTimeout,
+
+		*throughputLength,
+		*throughputChunks,
+	)
 	clients := 0
 	registry := rpc.NewRegistry(
-		r,
+		l,
 		services.SwitchRemote{},
 		*timeout,
 		ctx,
@@ -42,13 +52,13 @@ func main() {
 
 				log.Printf("%v clients connected", clients)
 
-				services.HandleClientDisconnect(r, remoteID)
+				services.HandleClientDisconnect(l, remoteID)
 			},
 		},
 	)
-	r.Peers = registry.Peers
+	l.Peers = registry.Peers
 
-	go services.HandleOpen(r)
+	go services.HandleOpen(l)
 
 	lis, err := net.Listen("tcp", *laddr)
 	if err != nil {

@@ -2,14 +2,22 @@ package services
 
 import (
 	"context"
+	"io"
 	"log"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
 )
 
 type SwitchRemote struct {
-	TestRTT func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
+	TestLatency    func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
+	TestThroughput func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+}
+
+type ThroughputResult struct {
+	Read  time.Duration
+	Write time.Duration
 }
 
 type Switch struct {
@@ -24,13 +32,13 @@ func NewSwitch(verbose bool) *Switch {
 	}
 }
 
-func (s *Switch) TestRTT(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {
+func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {
 	if s.verbose {
-		log.Println("Starting RTT tests for addrs", addrs)
+		log.Println("Starting latency tests for addrs", addrs)
 	}
 
-	rtts := []time.Duration{}
-	var rttLock sync.Mutex
+	latencies := []time.Duration{}
+	var latencyLock sync.Mutex
 
 	errs := make(chan error)
 
@@ -51,13 +59,13 @@ func (s *Switch) TestRTT(ctx context.Context, timeout time.Duration, addrs []str
 				return
 			}
 
-			rtt := time.Since(before)
+			latency := time.Since(before)
 
 			_ = conn.Close()
 
-			rttLock.Lock()
-			rtts = append(rtts, rtt)
-			rttLock.Unlock()
+			latencyLock.Lock()
+			latencies = append(latencies, latency)
+			latencyLock.Unlock()
 		}(addr)
 	}
 
@@ -72,6 +80,59 @@ func (s *Switch) TestRTT(ctx context.Context, timeout time.Duration, addrs []str
 	case err := <-errs:
 		return []time.Duration{}, err
 	case <-done:
-		return rtts, nil
+		return latencies, nil
 	}
+}
+
+func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
+	if s.verbose {
+		log.Println("Starting throughput tests for addrs", addrs)
+	}
+
+	throughputs := []ThroughputResult{}
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for _, addr := range addrs {
+		conn, err := net.DialTimeout("tcp", addr, timeout)
+		if err != nil {
+			return []ThroughputResult{}, err
+		}
+
+		throughput := ThroughputResult{}
+
+		{
+			before := time.Now()
+
+			for i := int64(0); i < chunks; i++ {
+				if _, err := io.CopyN(conn, r, length); err != nil {
+					_ = conn.Close()
+
+					return []ThroughputResult{}, err
+				}
+			}
+
+			throughput.Write = time.Since(before)
+		}
+
+		{
+			before := time.Now()
+
+			for i := int64(0); i < chunks; i++ {
+				if _, err := io.CopyN(io.Discard, conn, length); err != nil {
+					_ = conn.Close()
+
+					return []ThroughputResult{}, err
+				}
+			}
+
+			throughput.Read = time.Since(before)
+		}
+
+		_ = conn.Close()
+
+		throughputs = append(throughputs, throughput)
+	}
+
+	return throughputs, nil
 }
