@@ -10,7 +10,7 @@ import (
 
 func HandleTestConn(verbose bool, conn net.Conn) error {
 	if verbose {
-		log.Println("Starting throughput test")
+		log.Println("Handling throughput or latency test")
 	}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))

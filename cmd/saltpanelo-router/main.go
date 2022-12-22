@@ -9,6 +9,7 @@ import (
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/services"
+	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
 
 func main() {
@@ -81,7 +82,7 @@ func main() {
 				defer func() {
 					_ = conn.Close()
 
-					if err := recover(); err != nil {
+					if err := recover(); err != nil && !utils.IsClosedErr(err) {
 						log.Printf("Client disconnected with error: %v", err)
 					}
 				}()
