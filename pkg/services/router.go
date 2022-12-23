@@ -11,11 +11,16 @@ import (
 )
 
 var (
-	ErrSwitchAlreadyRegistered = errors.New("could not register switch: A switch with this peer ID is already registered")
+	ErrSwitchAlreadyRegistered  = errors.New("could not register switch: A switch with this remote ID is already registered")
+	ErrAdapterAlreadyRegistered = errors.New("could not register adapter: A adapter with this remote ID is already registered")
+	ErrDstNotFound              = errors.New("could not find destination")
+	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
 )
 
 type RouterRemote struct {
-	RegisterSwitch func(ctx context.Context, addr string) error
+	RegisterSwitch  func(ctx context.Context, addr string) error
+	RegisterAdapter func(ctx context.Context) error
+	FindRoute       func(ctx context.Context, dstID string) ([]string, error)
 }
 
 func HandleClientDisconnect(router *Router, remoteID string) {
@@ -35,6 +40,9 @@ type switchMetadata struct {
 type Router struct {
 	switchesLock sync.Mutex
 	switches     map[string]switchMetadata
+
+	adaptersLock sync.Mutex
+	adapters     map[string]struct{}
 
 	latencyTestInterval time.Duration
 	latencyTestTimeout  time.Duration
@@ -59,6 +67,8 @@ func NewRouter(
 	return &Router{
 		switches: map[string]switchMetadata{},
 
+		adapters: map[string]struct{}{},
+
 		latencyTestInterval: latencyTestInterval,
 		latencyTestTimeout:  latencyTestTimeout,
 
@@ -71,12 +81,17 @@ func NewRouter(
 
 func (r *Router) onClientDisconnect(remoteID string) {
 	r.switchesLock.Lock()
-	defer r.switchesLock.Unlock()
+	r.adaptersLock.Lock()
+	defer func() {
+		r.adaptersLock.Unlock()
+		r.switchesLock.Unlock()
+	}()
 
 	delete(r.switches, remoteID)
+	delete(r.adapters, remoteID)
 
 	if r.verbose {
-		log.Println("Removed switch with ID", remoteID, "from topology")
+		log.Println("Removed switch or adapter with ID", remoteID, "from topology")
 	}
 }
 
@@ -210,8 +225,52 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 	}
 
 	if r.verbose {
-		log.Println("Added switch with ID", remoteID, "from topology")
+		log.Println("Added switch with ID", remoteID, "to topology")
 	}
 
 	return nil
+}
+
+func (r *Router) RegisterAdapter(ctx context.Context) error {
+	remoteID := rpc.GetRemoteID(ctx)
+
+	r.adaptersLock.Lock()
+	defer r.adaptersLock.Unlock()
+
+	if _, ok := r.adapters[remoteID]; ok {
+		return ErrAdapterAlreadyRegistered
+	}
+
+	r.adapters[remoteID] = struct{}{}
+
+	if r.verbose {
+		log.Println("Added adapter with ID", remoteID, "to topology")
+	}
+
+	return nil
+}
+
+func (r *Router) FindRoute(ctx context.Context, dstID string) ([]string, error) {
+	remoteID := rpc.GetRemoteID(ctx)
+
+	r.switchesLock.Lock()
+	r.adaptersLock.Lock()
+	defer func() {
+		r.adaptersLock.Unlock()
+		r.switchesLock.Unlock()
+	}()
+
+	if _, ok := r.adapters[dstID]; !ok {
+		return []string{}, ErrDstNotFound
+	}
+
+	if remoteID == dstID {
+		return []string{}, ErrDstIsSrc
+	}
+
+	if r.verbose {
+		log.Println("Finding route from adapter with ID", remoteID, "to adapter with ID", dstID)
+	}
+
+	return []string{}, nil
 }
