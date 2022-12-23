@@ -48,7 +48,7 @@ func main() {
 					for candidate, peer := range l.Peers() {
 						if remoteID == candidate {
 							if *verbose {
-								log.Println("Registering with switch with ID", remoteID)
+								log.Println("Registering with router with ID", remoteID)
 							}
 
 							if advertisedAddr.IP == nil {
@@ -60,11 +60,11 @@ func main() {
 							}
 
 							if err := peer.RegisterSwitch(ctx, advertisedAddr.String()); err != nil {
-								log.Fatal("Could not register with switch with ID", remoteID, ", stopping:", err)
+								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
 							}
 
 							if *verbose {
-								log.Println("Registered with switch with ID", remoteID)
+								log.Println("Registered with router with ID", remoteID)
 							}
 						}
 					}
