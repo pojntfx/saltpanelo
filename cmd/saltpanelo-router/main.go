@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	laddr := flag.String("laddr", ":1337", "Listen address")
+	routerLaddr := flag.String("router-laddr", ":1337", "Router listen address")
+	metricsLaddr := flag.String("metrics-laddr", ":1338", "Metrics listen address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	latencyTestInterval := flag.Duration("latency-test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
@@ -26,7 +27,30 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewRouter(
+	metrics := services.NewMetrics(*verbose)
+	metricsClients := 0
+	metricsRegistry := rpc.NewRegistry(
+		metrics,
+		services.VisualizerRemote{},
+		*timeout,
+		ctx,
+		&rpc.Options{
+			ResponseBufferLen: rpc.DefaultResponseBufferLen,
+			OnClientConnect: func(remoteID string) {
+				metricsClients++
+
+				log.Printf("%v clients connected to metrics", metricsClients)
+			},
+			OnClientDisconnect: func(remoteID string) {
+				metricsClients--
+
+				log.Printf("%v clients connected to metrics", metricsClients)
+			},
+		},
+	)
+	metrics.Peers = metricsRegistry.Peers
+
+	router := services.NewRouter(
 		*verbose,
 
 		*latencyTestInterval,
@@ -34,63 +58,116 @@ func main() {
 
 		*throughputLength,
 		*throughputChunks,
+
+		metrics,
 	)
-	clients := 0
-	registry := rpc.NewRegistry(
-		l,
+	routerClients := 0
+	routerRegistry := rpc.NewRegistry(
+		router,
 		services.SwitchRemote{},
 		*timeout,
 		ctx,
 		&rpc.Options{
 			ResponseBufferLen: rpc.DefaultResponseBufferLen,
 			OnClientConnect: func(remoteID string) {
-				clients++
+				routerClients++
 
-				log.Printf("%v clients connected", clients)
+				log.Printf("%v clients connected to router", routerClients)
 			},
 			OnClientDisconnect: func(remoteID string) {
-				clients--
+				routerClients--
 
-				log.Printf("%v clients connected", clients)
+				log.Printf("%v clients connected to router", routerClients)
 
-				services.HandleClientDisconnect(l, remoteID)
+				services.HandleClientDisconnect(router, remoteID)
 			},
 		},
 	)
-	l.Peers = registry.Peers
+	router.Peers = routerRegistry.Peers
 
-	go services.HandleOpen(l)
+	go services.HandleOpen(router)
 
-	lis, err := net.Listen("tcp", *laddr)
-	if err != nil {
-		panic(err)
-	}
-	defer lis.Close()
+	errs := make(chan error)
 
-	log.Println("Listening on", lis.Addr())
+	go func() {
+		lis, err := net.Listen("tcp", *metricsLaddr)
+		if err != nil {
+			errs <- err
 
-	for {
-		func() {
-			conn, err := lis.Accept()
-			if err != nil {
-				log.Println("could not accept connection, continuing:", err)
+			return
+		}
+		defer lis.Close()
 
-				return
-			}
+		log.Println("Metrics listening on", lis.Addr())
 
-			go func() {
-				defer func() {
-					_ = conn.Close()
+		for {
+			func() {
+				conn, err := lis.Accept()
+				if err != nil {
+					log.Println("could not accept metrics connection, continuing:", err)
 
-					if err := recover(); err != nil && !utils.IsClosedErr(err) {
-						log.Printf("Client disconnected with error: %v", err)
+					return
+				}
+
+				go func() {
+					defer func() {
+						_ = conn.Close()
+
+						if err := recover(); err != nil && !utils.IsClosedErr(err) {
+							log.Printf("Client disconnected from metrics with error: %v", err)
+						}
+					}()
+
+					if err := metricsRegistry.Link(conn); err != nil {
+						panic(err)
 					}
 				}()
-
-				if err := registry.Link(conn); err != nil {
-					panic(err)
-				}
 			}()
-		}()
+		}
+	}()
+
+	go func() {
+		lis, err := net.Listen("tcp", *routerLaddr)
+		if err != nil {
+			errs <- err
+
+			return
+		}
+		defer lis.Close()
+
+		log.Println("Router listening on", lis.Addr())
+
+		for {
+			func() {
+				conn, err := lis.Accept()
+				if err != nil {
+					log.Println("could not accept router connection, continuing:", err)
+
+					return
+				}
+
+				go func() {
+					defer func() {
+						_ = conn.Close()
+
+						if err := recover(); err != nil && !utils.IsClosedErr(err) {
+							log.Printf("Client disconnected from router with error: %v", err)
+						}
+					}()
+
+					if err := routerRegistry.Link(conn); err != nil {
+						panic(err)
+					}
+				}()
+			}()
+		}
+	}()
+
+	for err := range errs {
+		if err == nil {
+			return
+		}
+
+		panic(err)
 	}
 }
