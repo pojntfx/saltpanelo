@@ -3,6 +3,7 @@ module github.com/pojntfx/saltpanelo
 go 1.19
 
 require (
+	github.com/dominikbraun/graph v0.15.0
 	github.com/pion/stun v0.3.5
 	github.com/pojntfx/dudirekta v0.4.0
 )
