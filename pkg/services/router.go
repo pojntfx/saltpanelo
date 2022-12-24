@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dominikbraun/graph"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 )
 
@@ -50,6 +51,11 @@ type Router struct {
 	throughputLength int64
 	throughputChunks int64
 
+	metrics *Metrics
+
+	graphLock sync.Mutex
+	graph     graph.Graph[string, string]
+
 	verbose bool
 
 	Peers func() map[string]SwitchRemote
@@ -63,6 +69,8 @@ func NewRouter(
 
 	throughputLength int64,
 	throughputChunks int64,
+
+	metrics *Metrics,
 ) *Router {
 	return &Router{
 		switches: map[string]switchMetadata{},
@@ -75,23 +83,77 @@ func NewRouter(
 		throughputLength: throughputLength,
 		throughputChunks: throughputChunks,
 
+		metrics: metrics,
+
+		graph: graph.New(graph.StringHash, graph.Directed(), graph.Weighted()),
+
 		verbose: verbose,
 	}
+}
+
+func (r *Router) updateGraph(ctx context.Context) error {
+	r.graphLock.Lock()
+	r.switchesLock.Lock()
+	r.adaptersLock.Lock()
+
+	r.graph = graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
+
+	for swID := range r.switches {
+		if err := r.graph.AddVertex(swID); err != nil {
+			return err
+		}
+	}
+
+	for swID := range r.switches {
+		for candidateID := range r.switches {
+			// Don't link to self
+			if swID == candidateID {
+				continue
+			}
+
+			// TODO: Also add throughput as weight
+			latency, ok := r.switches[swID].latencies[candidateID]
+			if !ok {
+				continue
+			}
+
+			if err := r.graph.AddEdge(swID, candidateID, graph.EdgeWeight(int(latency.Nanoseconds()))); err != nil {
+				return err
+			}
+		}
+	}
+
+	for aID := range r.adapters {
+		if err := r.graph.AddVertex(aID); err != nil {
+			return err
+		}
+	}
+
+	g := r.graph
+
+	r.switchesLock.Unlock()
+	r.adaptersLock.Unlock()
+	r.graphLock.Unlock()
+
+	return r.metrics.visualize(ctx, g)
 }
 
 func (r *Router) onClientDisconnect(remoteID string) {
 	r.switchesLock.Lock()
 	r.adaptersLock.Lock()
-	defer func() {
-		r.adaptersLock.Unlock()
-		r.switchesLock.Unlock()
-	}()
 
 	delete(r.switches, remoteID)
 	delete(r.adapters, remoteID)
 
+	r.adaptersLock.Unlock()
+	r.switchesLock.Unlock()
+
 	if r.verbose {
 		log.Println("Removed switch or adapter with ID", remoteID, "from topology")
+	}
+
+	if err := r.updateGraph(context.Background()); err != nil {
+		log.Println("Could not update graph, continuing:", err)
 	}
 }
 
@@ -107,13 +169,15 @@ func (r *Router) onOpen() {
 
 			r.switchesLock.Lock()
 			addrs := []string{}
-			for id, sw := range r.switches {
+			swIDs := []string{}
+			for swID, sw := range r.switches {
 				// Don't test latency to self
-				if id == remoteID {
+				if swID == remoteID {
 					continue
 				}
 
 				addrs = append(addrs, sw.addr)
+				swIDs = append(swIDs, swID)
 			}
 			r.switchesLock.Unlock()
 
@@ -138,8 +202,8 @@ func (r *Router) onOpen() {
 				}
 
 				results := map[string]time.Duration{}
-				for i, addr := range addrs {
-					results[addr] = testResults[i]
+				for i, swID := range swIDs {
+					results[swID] = testResults[i]
 				}
 
 				r.switchesLock.Lock()
@@ -153,10 +217,16 @@ func (r *Router) onOpen() {
 
 				sm.latencies = results
 
+				r.switches[remoteID] = sm
+
 				r.switchesLock.Unlock()
 
 				if r.verbose {
 					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.latencies)
+				}
+
+				if err := r.updateGraph(context.Background()); err != nil {
+					log.Println("Could not update graph, continuing:", err)
 				}
 			}(remoteID, peer)
 
@@ -196,10 +266,16 @@ func (r *Router) onOpen() {
 
 				sm.throughputs = results
 
+				r.switches[remoteID] = sm
+
 				r.switchesLock.Unlock()
 
 				if r.verbose {
 					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.throughputs)
+				}
+
+				if err := r.updateGraph(context.Background()); err != nil {
+					log.Println("Could not update graph, continuing:", err)
 				}
 			}(remoteID, peer)
 		}

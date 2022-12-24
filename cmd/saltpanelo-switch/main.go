@@ -14,8 +14,8 @@ import (
 
 func main() {
 	raddr := flag.String("raddr", "localhost:1337", "Remote address")
-	laddr := flag.String("laddr", ":1338", "Listen address")
-	aaddr := flag.String("aaddr", ":1338", "Listen address to advertise; leave hostname empty to resolve public IP using STUN")
+	laddr := flag.String("laddr", ":1340", "Listen address")
+	aaddr := flag.String("aaddr", ":1340", "Listen address to advertise; leave hostname empty to resolve public IP using STUN")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	stunAddr := flag.String("stun", "stun.l.google.com:19302", "STUN server address")
@@ -102,7 +102,9 @@ func main() {
 	go func() {
 		lis, err := net.Listen("tcp", *laddr)
 		if err != nil {
-			panic(err)
+			errs <- err
+
+			return
 		}
 		defer lis.Close()
 
