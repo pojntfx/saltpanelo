@@ -13,7 +13,7 @@ import (
 
 var (
 	ErrSwitchAlreadyRegistered  = errors.New("could not register switch: A switch with this remote ID is already registered")
-	ErrAdapterAlreadyRegistered = errors.New("could not register adapter: A adapter with this remote ID is already registered")
+	ErrAdapterAlreadyRegistered = errors.New("could not register adapter: An adapter with this remote ID is already registered")
 	ErrDstNotFound              = errors.New("could not find destination")
 	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
 )
@@ -32,15 +32,15 @@ func HandleOpen(router *Router) {
 	router.onOpen()
 }
 
-type switchMetadata struct {
-	addr        string
-	latencies   map[string]time.Duration
-	throughputs map[string]ThroughputResult
+type SwitchMetadata struct {
+	Addr        string
+	Latencies   map[string]time.Duration
+	Throughputs map[string]ThroughputResult
 }
 
 type Router struct {
 	switchesLock sync.Mutex
-	switches     map[string]switchMetadata
+	switches     map[string]SwitchMetadata
 
 	adaptersLock sync.Mutex
 	adapters     map[string]struct{}
@@ -73,7 +73,7 @@ func NewRouter(
 	metrics *Metrics,
 ) *Router {
 	return &Router{
-		switches: map[string]switchMetadata{},
+		switches: map[string]SwitchMetadata{},
 
 		adapters: map[string]struct{}{},
 
@@ -92,50 +92,25 @@ func NewRouter(
 }
 
 func (r *Router) updateGraph(ctx context.Context) error {
-	r.graphLock.Lock()
 	r.switchesLock.Lock()
 	r.adaptersLock.Lock()
 
-	r.graph = graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
-
-	for swID := range r.switches {
-		if err := r.graph.AddVertex(swID); err != nil {
-			return err
-		}
+	g, err := createGraph(r.switches, r.adapters)
+	if err != nil {
+		return err
 	}
 
-	for swID := range r.switches {
-		for candidateID := range r.switches {
-			// Don't link to self
-			if swID == candidateID {
-				continue
-			}
+	r.graphLock.Lock()
+	r.graph = g
+	r.graphLock.Unlock()
 
-			// TODO: Also add throughput as weight
-			latency, ok := r.switches[swID].latencies[candidateID]
-			if !ok {
-				continue
-			}
-
-			if err := r.graph.AddEdge(swID, candidateID, graph.EdgeWeight(int(latency.Nanoseconds()))); err != nil {
-				return err
-			}
-		}
-	}
-
-	for aID := range r.adapters {
-		if err := r.graph.AddVertex(aID); err != nil {
-			return err
-		}
-	}
-
-	g := r.graph
+	s := r.switches
+	a := r.adapters
 
 	r.switchesLock.Unlock()
 	r.adaptersLock.Unlock()
-	r.graphLock.Unlock()
 
-	return r.metrics.visualize(ctx, g)
+	return r.metrics.visualize(ctx, s, a)
 }
 
 func (r *Router) onClientDisconnect(remoteID string) {
@@ -176,7 +151,7 @@ func (r *Router) onOpen() {
 					continue
 				}
 
-				addrs = append(addrs, sw.addr)
+				addrs = append(addrs, sw.Addr)
 				swIDs = append(swIDs, swID)
 			}
 			r.switchesLock.Unlock()
@@ -215,14 +190,14 @@ func (r *Router) onOpen() {
 					return
 				}
 
-				sm.latencies = results
+				sm.Latencies = results
 
 				r.switches[remoteID] = sm
 
 				r.switchesLock.Unlock()
 
 				if r.verbose {
-					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.latencies)
+					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.Latencies)
 				}
 
 				if err := r.updateGraph(context.Background()); err != nil {
@@ -264,14 +239,14 @@ func (r *Router) onOpen() {
 					return
 				}
 
-				sm.throughputs = results
+				sm.Throughputs = results
 
 				r.switches[remoteID] = sm
 
 				r.switchesLock.Unlock()
 
 				if r.verbose {
-					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.throughputs)
+					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.Throughputs)
 				}
 
 				if err := r.updateGraph(context.Background()); err != nil {
@@ -294,7 +269,7 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 		return ErrSwitchAlreadyRegistered
 	}
 
-	r.switches[remoteID] = switchMetadata{
+	r.switches[remoteID] = SwitchMetadata{
 		addr,
 		map[string]time.Duration{},
 		map[string]ThroughputResult{},
