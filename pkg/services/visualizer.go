@@ -6,29 +6,63 @@ import (
 	"os"
 	"sync"
 
+	"github.com/dominikbraun/graph"
+	"github.com/dominikbraun/graph/draw"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 )
 
-type visualizerWriter struct {
-	VisualizerRemote
+func createGraph(
+	switches map[string]SwitchMetadata,
+	adapters map[string]struct{},
+) (graph.Graph[string, string], error) {
+	g := graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
 
-	ctx context.Context
-}
+	for swID := range switches {
+		if err := g.AddVertex(swID); err != nil {
+			return nil, err
+		}
+	}
 
-func (v visualizerWriter) Write(p []byte) (n int, err error) {
-	return v.WriteVisualization(v.ctx, p)
+	for swID := range switches {
+		for candidateID := range switches {
+			// Don't link to self
+			if swID == candidateID {
+				continue
+			}
+
+			// TODO: Also add throughput as weight
+			latency, ok := switches[swID].Latencies[candidateID]
+			if !ok {
+				continue
+			}
+
+			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(int(latency.Nanoseconds()))); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for aID := range adapters {
+		if err := g.AddVertex(aID); err != nil {
+			return nil, err
+		}
+	}
+
+	return g, nil
 }
 
 type VisualizerRemote struct {
-	WriteVisualization  func(ctx context.Context, p []byte) (n int, err error)
-	NewVisualization    func(ctx context.Context) error
-	FinishVisualization func(ctx context.Context) error
+	RenderVisualization func(
+		ctx context.Context,
+		switches map[string]SwitchMetadata,
+		adapters map[string]struct{},
+	) error
 }
 
 type Visualizer struct {
 	verbose bool
-	writer  *os.File
 
+	writer     *os.File
 	writerLock sync.Mutex
 
 	Peers func() map[string]MetricsRemote
@@ -41,13 +75,23 @@ func NewVisualizer(verbose bool, writer *os.File) *Visualizer {
 	}
 }
 
-func (v *Visualizer) NewVisualization(ctx context.Context) (err error) {
+func (v *Visualizer) RenderVisualization(
+	ctx context.Context,
+	switches map[string]SwitchMetadata,
+	adapters map[string]struct{},
+) error {
 	v.writerLock.Lock()
+	defer v.writerLock.Unlock()
 
 	remoteID := rpc.GetRemoteID(ctx)
 
 	if v.verbose {
-		log.Println("Creating new graph visualization for metrics service with ID", remoteID)
+		log.Println("Rendering graph visualization for metrics service with ID", remoteID)
+	}
+
+	g, err := createGraph(switches, adapters)
+	if err != nil {
+		return err
 	}
 
 	if err := v.writer.Truncate(0); err != nil {
@@ -62,35 +106,5 @@ func (v *Visualizer) NewVisualization(ctx context.Context) (err error) {
 		return err
 	}
 
-	return nil
-}
-
-func (v *Visualizer) WriteVisualization(ctx context.Context, p []byte) (n int, err error) {
-	remoteID := rpc.GetRemoteID(ctx)
-
-	if v.verbose {
-		log.Println("Writing graph visualization for metrics service with ID", remoteID)
-	}
-
-	n, err = v.writer.Write(p)
-	if err != nil {
-		v.writerLock.Unlock()
-
-		return -1, err
-	}
-
-	return n, nil
-}
-
-func (v *Visualizer) FinishVisualization(ctx context.Context) (err error) {
-	remoteID := rpc.GetRemoteID(ctx)
-
-	if v.verbose {
-		log.Println("Finishing new graph visualization for metrics service with ID", remoteID)
-	}
-
-	// TODO: Prevent calling `unlock` if already unlocked
-	v.writerLock.Unlock()
-
-	return nil
+	return draw.DOT(g, v.writer)
 }

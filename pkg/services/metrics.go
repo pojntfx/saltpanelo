@@ -3,9 +3,6 @@ package services
 import (
 	"context"
 	"log"
-
-	"github.com/dominikbraun/graph"
-	"github.com/dominikbraun/graph/draw"
 )
 
 type MetricsRemote struct{}
@@ -22,27 +19,17 @@ func NewMetrics(verbose bool) *Metrics {
 	}
 }
 
-func (m *Metrics) visualize(ctx context.Context, g graph.Graph[string, string]) error {
+func (m *Metrics) visualize(
+	ctx context.Context,
+	switches map[string]SwitchMetadata,
+	adapters map[string]struct{},
+) error {
 	for remoteID, peer := range m.Peers() {
 		if m.verbose {
 			log.Println("Visualizing graph for peer with ID", remoteID)
 		}
 
-		if err := peer.NewVisualization(ctx); err != nil {
-			return err
-		}
-
-		w := visualizerWriter{peer, ctx}
-
-		if err := draw.DOT(g, w); err != nil {
-			if err := peer.FinishVisualization(ctx); err != nil {
-				return err
-			}
-
-			return err
-		}
-
-		if err := peer.FinishVisualization(ctx); err != nil {
+		if err := peer.RenderVisualization(ctx, switches, adapters); err != nil {
 			return err
 		}
 	}
