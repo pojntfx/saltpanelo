@@ -49,7 +49,7 @@ func createGraph(
 			}
 
 			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(
-				int((latency.Milliseconds()*(throughput.Read.Nanoseconds()+throughput.Write.Nanoseconds()))/1000), // Weight latency 1000 times as much as throughput time
+				int(latency.Nanoseconds()+throughput.Read.Milliseconds()+throughput.Write.Milliseconds()),
 			)); err != nil {
 				return nil, err
 			}

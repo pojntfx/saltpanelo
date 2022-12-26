@@ -57,7 +57,12 @@ func (g *Gateway) getAdapters() map[string]struct{} {
 	g.adaptersLock.Lock()
 	defer g.adaptersLock.Unlock()
 
-	return g.adapters
+	a := map[string]struct{}{}
+	for k, v := range g.adapters {
+		a[k] = v
+	}
+
+	return a
 }
 
 func (g *Gateway) RegisterAdapter(ctx context.Context) error {

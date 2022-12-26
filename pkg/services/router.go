@@ -84,7 +84,10 @@ func NewRouter(
 func (r *Router) updateGraph(ctx context.Context) error {
 	r.switchesLock.Lock()
 
-	s := r.switches
+	s := map[string]SwitchMetadata{}
+	for k, v := range r.switches {
+		s[k] = v
+	}
 
 	r.switchesLock.Unlock()
 
@@ -212,8 +215,8 @@ func (r *Router) onOpen() {
 				}
 
 				results := map[string]ThroughputResult{}
-				for i, addr := range addrs {
-					results[addr] = testResults[i]
+				for i, swID := range swIDs {
+					results[swID] = testResults[i]
 				}
 
 				r.switchesLock.Lock()
