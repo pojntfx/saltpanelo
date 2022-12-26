@@ -11,6 +11,14 @@ import (
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 )
 
+type VisualizerRemote struct {
+	RenderVisualization func(
+		ctx context.Context,
+		switches map[string]SwitchMetadata,
+		adapters map[string]struct{},
+	) error
+}
+
 func createGraph(
 	switches map[string]SwitchMetadata,
 	adapters map[string]struct{},
@@ -30,13 +38,19 @@ func createGraph(
 				continue
 			}
 
-			// TODO: Also add throughput as weight
 			latency, ok := switches[swID].Latencies[candidateID]
 			if !ok {
 				continue
 			}
 
-			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(int(latency.Nanoseconds()))); err != nil {
+			throughput, ok := switches[swID].Throughputs[candidateID]
+			if !ok {
+				continue
+			}
+
+			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(
+				int((latency.Milliseconds()*(throughput.Read.Nanoseconds()+throughput.Write.Nanoseconds()))/1000), // Weight latency 1000 times as much as throughput time
+			)); err != nil {
 				return nil, err
 			}
 		}
@@ -49,14 +63,6 @@ func createGraph(
 	}
 
 	return g, nil
-}
-
-type VisualizerRemote struct {
-	RenderVisualization func(
-		ctx context.Context,
-		switches map[string]SwitchMetadata,
-		adapters map[string]struct{},
-	) error
 }
 
 type Visualizer struct {

@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1338", "Remote address")
+	raddr := flag.String("raddr", "localhost:1339", "Metric remote address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	out := flag.String("out", "saltpanelo.gv", "Path to write the Graphviz file to")

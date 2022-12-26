@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1337", "Remote address")
+	raddr := flag.String("raddr", "localhost:1337", "Router remote address")
 	laddr := flag.String("laddr", ":1340", "Listen address")
 	aaddr := flag.String("aaddr", ":1340", "Listen address to advertise; leave hostname empty to resolve public IP using STUN")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
