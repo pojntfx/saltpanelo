@@ -19,16 +19,14 @@ var (
 )
 
 type RouterRemote struct {
-	RegisterSwitch  func(ctx context.Context, addr string) error
-	RegisterAdapter func(ctx context.Context) error
-	FindRoute       func(ctx context.Context, dstID string) ([]string, error)
+	RegisterSwitch func(ctx context.Context, addr string) error
 }
 
-func HandleClientDisconnect(router *Router, remoteID string) {
+func HandleRouterClientDisconnect(router *Router, remoteID string) {
 	router.onClientDisconnect(remoteID)
 }
 
-func HandleOpen(router *Router) {
+func HandleRouterOpen(router *Router) {
 	router.onOpen()
 }
 
@@ -42,16 +40,14 @@ type Router struct {
 	switchesLock sync.Mutex
 	switches     map[string]SwitchMetadata
 
-	adaptersLock sync.Mutex
-	adapters     map[string]struct{}
-
 	latencyTestInterval time.Duration
 	latencyTestTimeout  time.Duration
 
 	throughputLength int64
 	throughputChunks int64
 
-	metrics *Metrics
+	Metrics *Metrics
+	Gateway *Gateway
 
 	graphLock sync.Mutex
 	graph     graph.Graph[string, string]
@@ -69,21 +65,15 @@ func NewRouter(
 
 	throughputLength int64,
 	throughputChunks int64,
-
-	metrics *Metrics,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
-
-		adapters: map[string]struct{}{},
 
 		latencyTestInterval: latencyTestInterval,
 		latencyTestTimeout:  latencyTestTimeout,
 
 		throughputLength: throughputLength,
 		throughputChunks: throughputChunks,
-
-		metrics: metrics,
 
 		graph: graph.New(graph.StringHash, graph.Directed(), graph.Weighted()),
 
@@ -93,9 +83,14 @@ func NewRouter(
 
 func (r *Router) updateGraph(ctx context.Context) error {
 	r.switchesLock.Lock()
-	r.adaptersLock.Lock()
 
-	g, err := createGraph(r.switches, r.adapters)
+	s := r.switches
+
+	r.switchesLock.Unlock()
+
+	a := r.Gateway.getAdapters()
+
+	g, err := createGraph(s, a)
 	if err != nil {
 		return err
 	}
@@ -104,27 +99,18 @@ func (r *Router) updateGraph(ctx context.Context) error {
 	r.graph = g
 	r.graphLock.Unlock()
 
-	s := r.switches
-	a := r.adapters
-
-	r.switchesLock.Unlock()
-	r.adaptersLock.Unlock()
-
-	return r.metrics.visualize(ctx, s, a)
+	return r.Metrics.visualize(ctx, s, a)
 }
 
 func (r *Router) onClientDisconnect(remoteID string) {
 	r.switchesLock.Lock()
-	r.adaptersLock.Lock()
 
 	delete(r.switches, remoteID)
-	delete(r.adapters, remoteID)
 
-	r.adaptersLock.Unlock()
 	r.switchesLock.Unlock()
 
 	if r.verbose {
-		log.Println("Removed switch or adapter with ID", remoteID, "from topology")
+		log.Println("Removed switch with ID", remoteID, "from topology")
 	}
 
 	if err := r.updateGraph(context.Background()); err != nil {
@@ -280,48 +266,4 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 	}
 
 	return nil
-}
-
-func (r *Router) RegisterAdapter(ctx context.Context) error {
-	remoteID := rpc.GetRemoteID(ctx)
-
-	r.adaptersLock.Lock()
-	defer r.adaptersLock.Unlock()
-
-	if _, ok := r.adapters[remoteID]; ok {
-		return ErrAdapterAlreadyRegistered
-	}
-
-	r.adapters[remoteID] = struct{}{}
-
-	if r.verbose {
-		log.Println("Added adapter with ID", remoteID, "to topology")
-	}
-
-	return nil
-}
-
-func (r *Router) FindRoute(ctx context.Context, dstID string) ([]string, error) {
-	remoteID := rpc.GetRemoteID(ctx)
-
-	r.switchesLock.Lock()
-	r.adaptersLock.Lock()
-	defer func() {
-		r.adaptersLock.Unlock()
-		r.switchesLock.Unlock()
-	}()
-
-	if _, ok := r.adapters[dstID]; !ok {
-		return []string{}, ErrDstNotFound
-	}
-
-	if remoteID == dstID {
-		return []string{}, ErrDstIsSrc
-	}
-
-	if r.verbose {
-		log.Println("Finding route from adapter with ID", remoteID, "to adapter with ID", dstID)
-	}
-
-	return []string{}, nil
 }

@@ -5,7 +5,7 @@ type AdapterRemote struct{}
 type Adapter struct {
 	verbose bool
 
-	Peers func() map[string]SwitchRemote
+	Peers func() map[string]GatewayRemote
 }
 
 func NewAdapter(verbose bool) *Adapter {

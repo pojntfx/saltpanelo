@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
@@ -16,7 +12,7 @@ import (
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1337", "Remote address")
+	raddr := flag.String("raddr", "localhost:1338", "Gateway remote address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
@@ -25,11 +21,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewSwitch(*verbose)
+	l := services.NewAdapter(*verbose)
 	clients := 0
 	registry := rpc.NewRegistry(
 		l,
-		services.RouterRemote{},
+		services.GatewayRemote{},
 		*timeout,
 		ctx,
 		&rpc.Options{
@@ -83,26 +79,6 @@ func main() {
 			errs <- err
 
 			return
-		}
-	}()
-
-	go func() {
-		reader := bufio.NewReader(os.Stdin)
-
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				panic(err)
-			}
-
-			for _, peer := range l.Peers() {
-				route, err := peer.FindRoute(ctx, strings.TrimSuffix(line, "\n"))
-				if err != nil {
-					panic(err)
-				}
-
-				fmt.Println(route)
-			}
 		}
 	}()
 

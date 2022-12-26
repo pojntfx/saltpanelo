@@ -14,7 +14,8 @@ import (
 
 func main() {
 	routerLaddr := flag.String("router-laddr", ":1337", "Router listen address")
-	metricsLaddr := flag.String("metrics-laddr", ":1338", "Metrics listen address")
+	gatewayLaddr := flag.String("gateway-laddr", ":1338", "Gateway listen address")
+	metricsLaddr := flag.String("metrics-laddr", ":1339", "Metrics listen address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	latencyTestInterval := flag.Duration("latency-test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
@@ -58,8 +59,6 @@ func main() {
 
 		*throughputLength,
 		*throughputChunks,
-
-		metrics,
 	)
 	routerClients := 0
 	routerRegistry := rpc.NewRegistry(
@@ -79,13 +78,43 @@ func main() {
 
 				log.Printf("%v clients connected to router", routerClients)
 
-				services.HandleClientDisconnect(router, remoteID)
+				services.HandleRouterClientDisconnect(router, remoteID)
 			},
 		},
 	)
 	router.Peers = routerRegistry.Peers
+	router.Metrics = metrics
 
-	go services.HandleOpen(router)
+	gateway := services.NewGateway(
+		*verbose,
+	)
+	gatewayClients := 0
+	gatewayRegistry := rpc.NewRegistry(
+		gateway,
+		services.AdapterRemote{},
+		*timeout,
+		ctx,
+		&rpc.Options{
+			ResponseBufferLen: rpc.DefaultResponseBufferLen,
+			OnClientConnect: func(remoteID string) {
+				gatewayClients++
+
+				log.Printf("%v clients connected to gateway", gatewayClients)
+			},
+			OnClientDisconnect: func(remoteID string) {
+				gatewayClients--
+
+				log.Printf("%v clients connected to gateway", gatewayClients)
+
+				services.HandleGatewayClientDisconnect(gateway, remoteID)
+			},
+		},
+	)
+	gateway.Peers = gatewayRegistry.Peers
+	gateway.Router = router
+	router.Gateway = gateway
+
+	go services.HandleRouterOpen(router)
 
 	errs := make(chan error)
 
@@ -156,6 +185,43 @@ func main() {
 					}()
 
 					if err := routerRegistry.Link(conn); err != nil {
+						panic(err)
+					}
+				}()
+			}()
+		}
+	}()
+
+	go func() {
+		lis, err := net.Listen("tcp", *gatewayLaddr)
+		if err != nil {
+			errs <- err
+
+			return
+		}
+		defer lis.Close()
+
+		log.Println("Gateway listening on", lis.Addr())
+
+		for {
+			func() {
+				conn, err := lis.Accept()
+				if err != nil {
+					log.Println("could not accept gateway connection, continuing:", err)
+
+					return
+				}
+
+				go func() {
+					defer func() {
+						_ = conn.Close()
+
+						if err := recover(); err != nil && !utils.IsClosedErr(err) {
+							log.Printf("Client disconnected from gateway with error: %v", err)
+						}
+					}()
+
+					if err := gatewayRegistry.Link(conn); err != nil {
 						panic(err)
 					}
 				}()
