@@ -10,6 +10,7 @@ import (
 
 type GatewayRemote struct {
 	RegisterAdapter func(ctx context.Context) error
+	RequestCall     func(ctx context.Context, dstID string) (bool, error)
 }
 
 func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) {
@@ -82,4 +83,28 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
+	remoteID := rpc.GetRemoteID(ctx)
+
+	if g.verbose {
+		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID)
+	}
+
+	if _, ok := g.adapters[dstID]; !ok {
+		return false, ErrDstNotFound
+	}
+
+	if remoteID == dstID {
+		return false, ErrDstIsSrc
+	}
+
+	for _, peer := range g.Peers() {
+		if remoteID == dstID {
+			return peer.RequestCall(ctx, remoteID)
+		}
+	}
+
+	return false, ErrDstNotFound
 }

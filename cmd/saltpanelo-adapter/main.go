@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"time"
 
+	"github.com/ncruces/zenity"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/services"
 )
@@ -21,7 +24,26 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewAdapter(*verbose)
+	l := services.NewAdapter(
+		*verbose,
+		func(ctx context.Context, srcID string) (bool, error) {
+			if err := zenity.Question(
+				fmt.Sprintf("Incoming call from remote with with ID %v, do you want to answer it?", srcID),
+				zenity.Title("Incoming Call"),
+				zenity.QuestionIcon,
+				zenity.OKLabel("Answer"),
+				zenity.CancelLabel("Decline"),
+			); err != nil {
+				if errors.Is(err, zenity.ErrCanceled) {
+					return false, nil
+				}
+
+				return false, err
+			}
+
+			return true, nil
+		},
+	)
 	clients := 0
 	registry := rpc.NewRegistry(
 		l,
