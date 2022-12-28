@@ -58,18 +58,18 @@ func main() {
 				log.Printf("%v clients connected", clients)
 
 				go func() {
-					for candidate, peer := range l.Peers() {
-						if remoteID == candidate {
+					for candidateID, peer := range l.Peers() {
+						if remoteID == candidateID {
 							if *verbose {
-								log.Println("Registering with router with ID", remoteID)
+								log.Println("Registering with gateway with ID", remoteID)
 							}
 
 							if err := peer.RegisterAdapter(ctx); err != nil {
-								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
+								log.Fatal("Could not register with gateway with ID", remoteID, ", stopping:", err)
 							}
 
 							if *verbose {
-								log.Println("Registered with router with ID", remoteID)
+								log.Println("Registered with gateway with ID", remoteID)
 							}
 						}
 					}
@@ -101,6 +101,40 @@ func main() {
 			errs <- err
 
 			return
+		}
+	}()
+
+	go func() {
+		for {
+			dstID, err := zenity.Entry("ID to call", zenity.Title("Dialer"))
+			if err != nil {
+				errs <- err
+
+				return
+			}
+
+			for _, peer := range l.Peers() {
+				accept, err := peer.RequestCall(ctx, dstID)
+				if err != nil {
+					errs <- err
+
+					return
+				}
+
+				if accept {
+					if err := zenity.Info("Callee answered the call"); err != nil {
+						errs <- err
+
+						return
+					}
+				} else {
+					if err := zenity.Error("Callee declined the call"); err != nil {
+						errs <- err
+
+						return
+					}
+				}
+			}
 		}
 	}()
 
