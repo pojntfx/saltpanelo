@@ -49,9 +49,11 @@ func (g *Gateway) onClientDisconnect(remoteID string) {
 		log.Println("Removed adapter with ID", remoteID, "from topology")
 	}
 
-	if err := g.Router.updateGraph(context.Background()); err != nil {
-		log.Println("Could not update graph, continuing:", err)
-	}
+	go func() {
+		if err := g.Router.updateGraph(context.Background()); err != nil {
+			log.Println("Could not update graph, continuing:", err)
+		}
+	}()
 }
 
 func (g *Gateway) getAdapters() map[string]struct{} {
@@ -82,26 +84,40 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 		log.Println("Added adapter with ID", remoteID, "to topology")
 	}
 
+	go func() {
+		if err := g.Router.updateGraph(context.Background()); err != nil {
+			log.Println("Could not update graph, continuing:", err)
+		}
+	}()
+
 	return nil
 }
 
 func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 	remoteID := rpc.GetRemoteID(ctx)
 
+	g.adaptersLock.Lock()
+
 	if g.verbose {
 		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID)
 	}
 
 	if _, ok := g.adapters[dstID]; !ok {
+		g.adaptersLock.Unlock()
+
 		return false, ErrDstNotFound
 	}
 
 	if remoteID == dstID {
+		g.adaptersLock.Unlock()
+
 		return false, ErrDstIsSrc
 	}
 
-	for _, peer := range g.Peers() {
-		if remoteID == dstID {
+	g.adaptersLock.Unlock()
+
+	for candidateID, peer := range g.Peers() {
+		if dstID == candidateID {
 			return peer.RequestCall(ctx, remoteID)
 		}
 	}
