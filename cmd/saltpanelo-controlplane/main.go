@@ -29,6 +29,19 @@ func main() {
 	defer cancel()
 
 	metrics := services.NewMetrics(*verbose)
+	router := services.NewRouter(
+		*verbose,
+
+		*latencyTestInterval,
+		*latencyTestTimeout,
+
+		*throughputLength,
+		*throughputChunks,
+	)
+	gateway := services.NewGateway(
+		*verbose,
+	)
+
 	metricsClients := 0
 	metricsRegistry := rpc.NewRegistry(
 		metrics,
@@ -41,6 +54,8 @@ func main() {
 				metricsClients++
 
 				log.Printf("%v clients connected to metrics", metricsClients)
+
+				services.HandleMetricsClientConnect(router)
 			},
 			OnClientDisconnect: func(remoteID string) {
 				metricsClients--
@@ -51,15 +66,6 @@ func main() {
 	)
 	metrics.Peers = metricsRegistry.Peers
 
-	router := services.NewRouter(
-		*verbose,
-
-		*latencyTestInterval,
-		*latencyTestTimeout,
-
-		*throughputLength,
-		*throughputChunks,
-	)
 	routerClients := 0
 	routerRegistry := rpc.NewRegistry(
 		router,
@@ -85,9 +91,6 @@ func main() {
 	router.Peers = routerRegistry.Peers
 	router.Metrics = metrics
 
-	gateway := services.NewGateway(
-		*verbose,
-	)
 	gatewayClients := 0
 	gatewayRegistry := rpc.NewRegistry(
 		gateway,

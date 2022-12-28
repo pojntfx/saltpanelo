@@ -7,6 +7,10 @@ import (
 
 type MetricsRemote struct{}
 
+func HandleMetricsClientConnect(router *Router) {
+	router.updateGraph(context.Background())
+}
+
 type Metrics struct {
 	verbose bool
 

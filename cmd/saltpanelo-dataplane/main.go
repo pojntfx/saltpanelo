@@ -45,8 +45,8 @@ func main() {
 				log.Printf("%v clients connected", clients)
 
 				go func() {
-					for candidate, peer := range l.Peers() {
-						if remoteID == candidate {
+					for candidateID, peer := range l.Peers() {
+						if remoteID == candidateID {
 							if *verbose {
 								log.Println("Registering with router with ID", remoteID)
 							}

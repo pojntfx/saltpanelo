@@ -116,9 +116,11 @@ func (r *Router) onClientDisconnect(remoteID string) {
 		log.Println("Removed switch with ID", remoteID, "from topology")
 	}
 
-	if err := r.updateGraph(context.Background()); err != nil {
-		log.Println("Could not update graph, continuing:", err)
-	}
+	go func() {
+		if err := r.updateGraph(context.Background()); err != nil {
+			log.Println("Could not update graph, continuing:", err)
+		}
+	}()
 }
 
 func (r *Router) onOpen() {
@@ -189,9 +191,11 @@ func (r *Router) onOpen() {
 					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.Latencies)
 				}
 
-				if err := r.updateGraph(context.Background()); err != nil {
-					log.Println("Could not update graph, continuing:", err)
-				}
+				go func() {
+					if err := r.updateGraph(context.Background()); err != nil {
+						log.Println("Could not update graph, continuing:", err)
+					}
+				}()
 			}(remoteID, peer)
 
 			go func(remoteID string, peer SwitchRemote) {
@@ -238,9 +242,11 @@ func (r *Router) onOpen() {
 					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.Throughputs)
 				}
 
-				if err := r.updateGraph(context.Background()); err != nil {
-					log.Println("Could not update graph, continuing:", err)
-				}
+				go func() {
+					if err := r.updateGraph(context.Background()); err != nil {
+						log.Println("Could not update graph, continuing:", err)
+					}
+				}()
 			}(remoteID, peer)
 		}
 
@@ -267,6 +273,12 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 	if r.verbose {
 		log.Println("Added switch with ID", remoteID, "to topology")
 	}
+
+	go func() {
+		if err := r.updateGraph(context.Background()); err != nil {
+			log.Println("Could not update graph, continuing:", err)
+		}
+	}()
 
 	return nil
 }
