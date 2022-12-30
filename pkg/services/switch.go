@@ -37,6 +37,18 @@ func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs [
 		log.Println("Starting latency tests for addrs", addrs)
 	}
 
+	return testLatency(timeout, addrs)
+}
+
+func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
+	if s.verbose {
+		log.Println("Starting throughput tests for addrs", addrs)
+	}
+
+	return testThroughput(timeout, addrs, length, chunks)
+}
+
+func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	var latencyLock sync.Mutex
 
@@ -84,11 +96,7 @@ func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs [
 	}
 }
 
-func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
-	if s.verbose {
-		log.Println("Starting throughput tests for addrs", addrs)
-	}
-
+func testThroughput(timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
 	throughputs := []ThroughputResult{}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))

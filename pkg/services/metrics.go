@@ -26,7 +26,7 @@ func NewMetrics(verbose bool) *Metrics {
 func (m *Metrics) visualize(
 	ctx context.Context,
 	switches map[string]SwitchMetadata,
-	adapters map[string]struct{},
+	adapters map[string]AdapterMetadata,
 ) error {
 	for remoteID, peer := range m.Peers() {
 		if m.verbose {

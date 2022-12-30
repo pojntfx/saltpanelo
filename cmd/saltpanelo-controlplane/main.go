@@ -18,8 +18,8 @@ func main() {
 	metricsLaddr := flag.String("metrics-laddr", ":1339", "Metrics listen address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
-	latencyTestInterval := flag.Duration("latency-test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
-	latencyTestTimeout := flag.Duration("latency-test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
+	testInterval := flag.Duration("test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
+	testTimeout := flag.Duration("test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
 	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 
@@ -32,8 +32,8 @@ func main() {
 	router := services.NewRouter(
 		*verbose,
 
-		*latencyTestInterval,
-		*latencyTestTimeout,
+		*testInterval,
+		*testTimeout,
 
 		*throughputLength,
 		*throughputChunks,
