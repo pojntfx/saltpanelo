@@ -4,14 +4,28 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 )
 
 var (
 	ErrNoPeersFound = errors.New("could not find any peers")
 )
 
+type CallRequestResponse struct {
+	Accept      bool
+	Latencies   []time.Duration
+	Throughputs []ThroughputResult
+}
+
 type AdapterRemote struct {
-	RequestCall func(ctx context.Context, srcID string) (bool, error)
+	RequestCall func(
+		ctx context.Context,
+		srcID string,
+		timeout time.Duration,
+		addrs []string,
+		length,
+		chunks int64,
+	) (CallRequestResponse, error)
 }
 
 func RequestCall(adapter *Adapter, dstID string) (bool, error) {
@@ -38,17 +52,92 @@ func NewAdapter(
 	}
 }
 
-func (a *Adapter) RequestCall(ctx context.Context, srcID string) (bool, error) {
+func (a *Adapter) RequestCall(
+	ctx context.Context,
+	srcID string,
+	timeout time.Duration,
+	addrs []string,
+	length,
+	chunks int64,
+) (CallRequestResponse, error) {
 	if a.verbose {
 		log.Println("Remote with ID", srcID, "is requesting a call")
 	}
 
 	accept, err := a.onRequestCall(ctx, srcID)
 	if err != nil {
-		return false, err
+		return CallRequestResponse{
+			Accept:      false,
+			Latencies:   []time.Duration{},
+			Throughputs: []ThroughputResult{},
+		}, err
 	}
 
-	return accept, nil
+	if !accept {
+		return CallRequestResponse{
+			Accept:      false,
+			Latencies:   []time.Duration{},
+			Throughputs: []ThroughputResult{},
+		}, nil
+	}
+
+	latencyRes := make(chan []time.Duration)
+	throughputRes := make(chan []ThroughputResult)
+	errs := make(chan error)
+
+	go func() {
+		latency, err := testLatency(timeout, addrs)
+		if err != nil {
+			errs <- err
+
+			return
+		}
+
+		latencyRes <- latency
+	}()
+
+	go func() {
+		throughput, err := testThroughput(timeout, addrs, length, chunks)
+		if err != nil {
+			errs <- err
+
+			return
+		}
+
+		throughputRes <- throughput
+	}()
+
+	var latency []time.Duration
+	var throughput []ThroughputResult
+l:
+	for {
+		select {
+		case l := <-latencyRes:
+			latency = l
+
+			if len(latency) >= len(addrs) && len(throughput) >= len(addrs) {
+				break l
+			}
+		case t := <-throughputRes:
+			throughput = t
+
+			if len(latency) >= len(addrs) && len(throughput) >= len(addrs) {
+				break l
+			}
+		case err := <-errs:
+			return CallRequestResponse{
+				Accept:      false,
+				Latencies:   []time.Duration{},
+				Throughputs: []ThroughputResult{},
+			}, err
+		}
+	}
+
+	return CallRequestResponse{
+		Accept:      true,
+		Latencies:   latency,
+		Throughputs: throughput,
+	}, nil
 }
 
 func (a *Adapter) requestCall(

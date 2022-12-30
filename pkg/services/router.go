@@ -40,8 +40,8 @@ type Router struct {
 	switchesLock sync.Mutex
 	switches     map[string]SwitchMetadata
 
-	latencyTestInterval time.Duration
-	latencyTestTimeout  time.Duration
+	testInterval time.Duration
+	testTimeout  time.Duration
 
 	throughputLength int64
 	throughputChunks int64
@@ -60,8 +60,8 @@ type Router struct {
 func NewRouter(
 	verbose bool,
 
-	latencyTestInterval time.Duration,
-	latencyTestTimeout time.Duration,
+	testInterval time.Duration,
+	testTimeout time.Duration,
 
 	throughputLength int64,
 	throughputChunks int64,
@@ -69,8 +69,8 @@ func NewRouter(
 	return &Router{
 		switches: map[string]SwitchMetadata{},
 
-		latencyTestInterval: latencyTestInterval,
-		latencyTestTimeout:  latencyTestTimeout,
+		testInterval: testInterval,
+		testTimeout:  testTimeout,
 
 		throughputLength: throughputLength,
 		throughputChunks: throughputChunks,
@@ -124,7 +124,7 @@ func (r *Router) onClientDisconnect(remoteID string) {
 }
 
 func (r *Router) onOpen() {
-	t := time.NewTicker(r.latencyTestInterval)
+	t := time.NewTicker(r.testInterval)
 	defer t.Stop()
 
 	for range t.C {
@@ -154,7 +154,7 @@ func (r *Router) onOpen() {
 					log.Println("Starting latency tests for switch with ID", remoteID)
 				}
 
-				testResults, err := peer.TestLatency(nil, r.latencyTestTimeout, addrs)
+				testResults, err := peer.TestLatency(nil, r.testTimeout, addrs)
 				if err != nil {
 					log.Println("Could not run latency test for switch with ID", remoteID, ", continuing:", err)
 
@@ -162,7 +162,7 @@ func (r *Router) onOpen() {
 				}
 
 				if len(testResults) < len(addrs) {
-					log.Println("Received invalid length of latency test results from switch with ID", remoteID, ", continuing")
+					log.Printf("%v: for ID %v, continuing", ErrInvalidLatencyTestResultLength, remoteID)
 
 					return
 				}
@@ -205,7 +205,7 @@ func (r *Router) onOpen() {
 					log.Println("Starting throughput tests for switch with ID", remoteID)
 				}
 
-				testResults, err := peer.TestThroughput(nil, r.latencyTestTimeout, addrs, r.throughputLength, r.throughputChunks)
+				testResults, err := peer.TestThroughput(nil, r.testTimeout, addrs, r.throughputLength, r.throughputChunks)
 				if err != nil {
 					log.Println("Could not run throughput test for switch with ID", remoteID, ", continuing:", err)
 
@@ -213,7 +213,7 @@ func (r *Router) onOpen() {
 				}
 
 				if len(testResults) < len(addrs) {
-					log.Println("Received invalid length of throughput test results from switch with ID", remoteID, ", continuing")
+					log.Printf("%v: for ID %v, continuing", ErrInvalidThroughputTestResultLength, remoteID)
 
 					return
 				}
@@ -252,6 +252,18 @@ func (r *Router) onOpen() {
 
 		wg.Wait()
 	}
+}
+
+func (r *Router) getSwitches() map[string]SwitchMetadata {
+	r.switchesLock.Lock()
+	defer r.switchesLock.Unlock()
+
+	a := map[string]SwitchMetadata{}
+	for k, v := range r.switches {
+		a[k] = v
+	}
+
+	return a
 }
 
 func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {

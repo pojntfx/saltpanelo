@@ -15,13 +15,13 @@ type VisualizerRemote struct {
 	RenderVisualization func(
 		ctx context.Context,
 		switches map[string]SwitchMetadata,
-		adapters map[string]struct{},
+		adapters map[string]AdapterMetadata,
 	) error
 }
 
 func createGraph(
 	switches map[string]SwitchMetadata,
-	adapters map[string]struct{},
+	adapters map[string]AdapterMetadata,
 ) (graph.Graph[string, string], error) {
 	g := graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
 
@@ -62,6 +62,8 @@ func createGraph(
 		}
 	}
 
+	// TODO: Add links between adapters and switches
+
 	return g, nil
 }
 
@@ -84,7 +86,7 @@ func NewVisualizer(verbose bool, writer *os.File) *Visualizer {
 func (v *Visualizer) RenderVisualization(
 	ctx context.Context,
 	switches map[string]SwitchMetadata,
-	adapters map[string]struct{},
+	adapters map[string]AdapterMetadata,
 ) error {
 	v.writerLock.Lock()
 	defer v.writerLock.Unlock()
