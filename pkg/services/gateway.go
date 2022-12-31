@@ -13,6 +13,8 @@ import (
 var (
 	ErrInvalidLatencyTestResultLength    = errors.New("received invalid length of latency test results")
 	ErrInvalidThroughputTestResultLength = errors.New("received invalid length of throughput test results")
+	ErrSrcNotFound                       = errors.New("could not find source")
+	ErrAdapterNotFound                   = errors.New("could not find adapter")
 )
 
 type GatewayRemote struct {
@@ -76,6 +78,71 @@ func (g *Gateway) getAdapters() map[string]AdapterMetadata {
 	return a
 }
 
+func (g *Gateway) refreshPeerLatency(
+	ctx context.Context,
+
+	remote AdapterRemote,
+	remoteID string,
+
+	addrs []string,
+	swIDs []string,
+) error {
+	rawLatencies, err := remote.TestLatency(ctx, g.Router.testTimeout, addrs)
+	if err != nil {
+		return err
+	}
+
+	rawThroughputs, err := remote.TestThroughput(
+		ctx,
+		g.Router.testTimeout,
+		addrs,
+		g.Router.throughputLength,
+		g.Router.throughputChunks)
+	if err != nil {
+		return err
+	}
+
+	if len(rawLatencies) < len(addrs) {
+		log.Printf("%v: for ID %v, stopping", ErrInvalidLatencyTestResultLength, remoteID)
+
+		return ErrInvalidLatencyTestResultLength
+	}
+
+	if len(rawThroughputs) < len(addrs) {
+		log.Printf("%v: for ID %v, stopping", ErrInvalidThroughputTestResultLength, remoteID)
+
+		return ErrInvalidThroughputTestResultLength
+	}
+
+	latencies := map[string]time.Duration{}
+	for i, swID := range swIDs {
+		latencies[swID] = rawLatencies[i]
+	}
+
+	throughputs := map[string]ThroughputResult{}
+	for i, swID := range swIDs {
+		throughputs[swID] = rawThroughputs[i]
+	}
+
+	g.adaptersLock.Lock()
+
+	sm, ok := g.adapters[remoteID]
+	if !ok {
+		g.adaptersLock.Unlock()
+
+		return ErrAdapterNotFound
+	}
+
+	sm.Latencies = latencies
+	sm.Throughputs = throughputs
+
+	g.adapters[remoteID] = sm
+
+	g.adaptersLock.Unlock()
+
+	return nil
+}
+
 func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	remoteID := rpc.GetRemoteID(ctx)
 
@@ -124,7 +191,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 
 	g.adaptersLock.Unlock()
 
-	for candidateID, peer := range g.Peers() {
+	for candidateID, callee := range g.Peers() {
 		if dstID == candidateID {
 			g.adaptersLock.Lock()
 
@@ -137,59 +204,57 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 
 			g.adaptersLock.Unlock()
 
-			callRequestResponse, err := peer.RequestCall(
+			accept, err := callee.RequestCall(
 				ctx,
 				remoteID,
-				g.Router.testTimeout,
-				addrs,
-				g.Router.throughputLength,
-				g.Router.throughputChunks,
 			)
 			if err != nil {
 				return false, err
 			}
 
-			if !callRequestResponse.Accept {
+			if !accept {
 				return false, nil
 			}
 
-			if len(callRequestResponse.Latencies) < len(addrs) {
-				log.Printf("%v: for ID %v, stopping", ErrInvalidLatencyTestResultLength, candidateID)
+			var caller AdapterRemote
+			found := false
+			for candidateID, candidatePeer := range g.Peers() {
+				if remoteID == candidateID {
+					caller = candidatePeer
 
-				return false, ErrInvalidLatencyTestResultLength
+					found = true
+
+					break
+				}
 			}
 
-			if len(callRequestResponse.Throughputs) < len(addrs) {
-				log.Printf("%v: for ID %v, stopping", ErrInvalidThroughputTestResultLength, candidateID)
-
-				return false, ErrInvalidThroughputTestResultLength
+			if !found {
+				return false, ErrSrcNotFound
 			}
 
-			latencies := map[string]time.Duration{}
-			for i, swID := range swIDs {
-				latencies[swID] = callRequestResponse.Latencies[i]
+			if err := g.refreshPeerLatency(
+				ctx,
+
+				callee,
+				candidateID,
+
+				addrs,
+				swIDs,
+			); err != nil {
+				return false, err
 			}
 
-			throughputs := map[string]ThroughputResult{}
-			for i, swID := range swIDs {
-				throughputs[swID] = callRequestResponse.Throughputs[i]
+			if err := g.refreshPeerLatency(
+				ctx,
+
+				caller,
+				remoteID,
+
+				addrs,
+				swIDs,
+			); err != nil {
+				return false, err
 			}
-
-			g.adaptersLock.Lock()
-
-			sm, ok := g.adapters[remoteID]
-			if !ok {
-				g.adaptersLock.Unlock()
-
-				break
-			}
-
-			sm.Latencies = latencies
-			sm.Throughputs = throughputs
-
-			g.adapters[remoteID] = sm
-
-			g.adaptersLock.Unlock()
 
 			if g.verbose {
 				log.Println("Finished requesting call for ID", candidateID)
@@ -199,7 +264,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 				return false, err
 			}
 
-			return callRequestResponse.Accept, nil
+			return true, nil
 		}
 	}
 
