@@ -7,8 +7,8 @@ import (
 
 type MetricsRemote struct{}
 
-func HandleMetricsClientConnect(router *Router) {
-	router.updateGraph(context.Background())
+func HandleMetricsClientConnect(router *Router) error {
+	return router.updateGraph(context.Background())
 }
 
 type Metrics struct {
