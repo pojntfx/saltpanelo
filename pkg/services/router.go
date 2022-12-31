@@ -22,8 +22,8 @@ type RouterRemote struct {
 	RegisterSwitch func(ctx context.Context, addr string) error
 }
 
-func HandleRouterClientDisconnect(router *Router, remoteID string) {
-	router.onClientDisconnect(remoteID)
+func HandleRouterClientDisconnect(router *Router, remoteID string) error {
+	return router.onClientDisconnect(remoteID)
 }
 
 func HandleRouterOpen(router *Router) {
@@ -102,10 +102,16 @@ func (r *Router) updateGraph(ctx context.Context) error {
 	r.graph = g
 	r.graphLock.Unlock()
 
-	return r.Metrics.visualize(ctx, s, a)
+	go func() {
+		if err := r.Metrics.visualize(ctx, s, a); err != nil {
+			log.Println("Could visualize graph, continuing:", err)
+		}
+	}()
+
+	return nil
 }
 
-func (r *Router) onClientDisconnect(remoteID string) {
+func (r *Router) onClientDisconnect(remoteID string) error {
 	r.switchesLock.Lock()
 
 	delete(r.switches, remoteID)
@@ -116,11 +122,7 @@ func (r *Router) onClientDisconnect(remoteID string) {
 		log.Println("Removed switch with ID", remoteID, "from topology")
 	}
 
-	go func() {
-		if err := r.updateGraph(context.Background()); err != nil {
-			log.Println("Could not update graph, continuing:", err)
-		}
-	}()
+	return r.updateGraph(context.Background())
 }
 
 func (r *Router) onOpen() {
@@ -191,11 +193,9 @@ func (r *Router) onOpen() {
 					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.Latencies)
 				}
 
-				go func() {
-					if err := r.updateGraph(context.Background()); err != nil {
-						log.Println("Could not update graph, continuing:", err)
-					}
-				}()
+				if err := r.updateGraph(context.Background()); err != nil {
+					log.Println("Could not update graph, continuing:", err)
+				}
 			}(remoteID, peer)
 
 			go func(remoteID string, peer SwitchRemote) {
@@ -242,11 +242,9 @@ func (r *Router) onOpen() {
 					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.Throughputs)
 				}
 
-				go func() {
-					if err := r.updateGraph(context.Background()); err != nil {
-						log.Println("Could not update graph, continuing:", err)
-					}
-				}()
+				if err := r.updateGraph(context.Background()); err != nil {
+					log.Println("Could not update graph, continuing:", err)
+				}
 			}(remoteID, peer)
 		}
 
@@ -270,9 +268,10 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 	remoteID := rpc.GetRemoteID(ctx)
 
 	r.switchesLock.Lock()
-	defer r.switchesLock.Unlock()
 
 	if _, ok := r.switches[remoteID]; ok {
+		r.switchesLock.Unlock()
+
 		return ErrSwitchAlreadyRegistered
 	}
 
@@ -286,11 +285,7 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 		log.Println("Added switch with ID", remoteID, "to topology")
 	}
 
-	go func() {
-		if err := r.updateGraph(context.Background()); err != nil {
-			log.Println("Could not update graph, continuing:", err)
-		}
-	}()
+	r.switchesLock.Unlock()
 
-	return nil
+	return r.updateGraph(context.Background())
 }

@@ -20,8 +20,8 @@ type GatewayRemote struct {
 	RequestCall     func(ctx context.Context, dstID string) (bool, error)
 }
 
-func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) {
-	gateway.onClientDisconnect(remoteID)
+func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) error {
+	return gateway.onClientDisconnect(remoteID)
 }
 
 type AdapterMetadata struct {
@@ -50,7 +50,7 @@ func NewGateway(
 	}
 }
 
-func (g *Gateway) onClientDisconnect(remoteID string) {
+func (g *Gateway) onClientDisconnect(remoteID string) error {
 	g.adaptersLock.Lock()
 
 	delete(g.adapters, remoteID)
@@ -61,11 +61,7 @@ func (g *Gateway) onClientDisconnect(remoteID string) {
 		log.Println("Removed adapter with ID", remoteID, "from topology")
 	}
 
-	go func() {
-		if err := g.Router.updateGraph(context.Background()); err != nil {
-			log.Println("Could not update graph, continuing:", err)
-		}
-	}()
+	return g.Router.updateGraph(context.Background())
 }
 
 func (g *Gateway) getAdapters() map[string]AdapterMetadata {
@@ -84,9 +80,10 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	remoteID := rpc.GetRemoteID(ctx)
 
 	g.adaptersLock.Lock()
-	defer g.adaptersLock.Unlock()
 
 	if _, ok := g.adapters[remoteID]; ok {
+		g.adaptersLock.Unlock()
+
 		return ErrAdapterAlreadyRegistered
 	}
 
@@ -99,13 +96,9 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 		log.Println("Added adapter with ID", remoteID, "to topology")
 	}
 
-	go func() {
-		if err := g.Router.updateGraph(context.Background()); err != nil {
-			log.Println("Could not update graph, continuing:", err)
-		}
-	}()
+	g.adaptersLock.Unlock()
 
-	return nil
+	return g.Router.updateGraph(context.Background())
 }
 
 func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
@@ -202,11 +195,9 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 				log.Println("Finished requesting call for ID", candidateID)
 			}
 
-			go func() {
-				if err := g.Router.updateGraph(context.Background()); err != nil {
-					log.Println("Could not update graph, continuing:", err)
-				}
-			}()
+			if err := g.Router.updateGraph(context.Background()); err != nil {
+				return false, err
+			}
 
 			return callRequestResponse.Accept, nil
 		}

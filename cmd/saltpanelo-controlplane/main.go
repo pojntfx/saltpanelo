@@ -55,7 +55,9 @@ func main() {
 
 				log.Printf("%v clients connected to metrics", metricsClients)
 
-				services.HandleMetricsClientConnect(router)
+				if err := services.HandleMetricsClientConnect(router); err != nil {
+					log.Println("Could not handle router client disconnected, continuing:", err)
+				}
 			},
 			OnClientDisconnect: func(remoteID string) {
 				metricsClients--
@@ -84,7 +86,9 @@ func main() {
 
 				log.Printf("%v clients connected to router", routerClients)
 
-				services.HandleRouterClientDisconnect(router, remoteID)
+				if err := services.HandleRouterClientDisconnect(router, remoteID); err != nil {
+					log.Println("Could not handle router client disconnected, continuing:", err)
+				}
 			},
 		},
 	)
@@ -109,7 +113,9 @@ func main() {
 
 				log.Printf("%v clients connected to gateway", gatewayClients)
 
-				services.HandleGatewayClientDisconnect(gateway, remoteID)
+				if err := services.HandleGatewayClientDisconnect(gateway, remoteID); err != nil {
+					log.Println("Could not handle gateway client disconnected, continuing:", err)
+				}
 			},
 		},
 	)
