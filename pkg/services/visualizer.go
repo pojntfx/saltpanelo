@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -26,7 +27,7 @@ func createGraph(
 	g := graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
 
 	for swID := range switches {
-		if err := g.AddVertex(swID); err != nil {
+		if err := g.AddVertex(swID, graph.VertexAttribute("label", fmt.Sprintf("Switch %v", swID))); err != nil {
 			return nil, err
 		}
 	}
@@ -48,16 +49,16 @@ func createGraph(
 				continue
 			}
 
-			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(
-				int(latency.Nanoseconds()+throughput.Read.Milliseconds()+throughput.Write.Milliseconds()),
-			)); err != nil {
+			weight := int(latency.Nanoseconds() + throughput.Read.Milliseconds() + throughput.Write.Milliseconds())
+
+			if err := g.AddEdge(swID, candidateID, graph.EdgeWeight(weight), graph.EdgeAttribute("label", fmt.Sprint(weight))); err != nil {
 				return nil, err
 			}
 		}
 	}
 
 	for aID := range adapters {
-		if err := g.AddVertex(aID); err != nil {
+		if err := g.AddVertex(aID, graph.VertexAttribute("label", fmt.Sprintf("Adapter %v", aID))); err != nil {
 			return nil, err
 		}
 	}
