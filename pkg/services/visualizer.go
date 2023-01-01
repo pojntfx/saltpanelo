@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -81,10 +82,18 @@ func createGraph(
 			weight := int(latency.Nanoseconds() + adapters[aID].Throughputs[swID].Read.Milliseconds() + adapters[aID].Throughputs[swID].Write.Milliseconds())
 
 			if err := g.AddEdge(swID, aID, graph.EdgeWeight(weight), graph.EdgeAttribute("label", fmt.Sprint(weight))); err != nil {
+				if errors.Is(err, graph.ErrVertexNotFound) {
+					continue
+				}
+
 				return nil, err
 			}
 
 			if err := g.AddEdge(aID, swID, graph.EdgeWeight(weight), graph.EdgeAttribute("label", fmt.Sprint(weight))); err != nil {
+				if errors.Is(err, graph.ErrVertexNotFound) {
+					continue
+				}
+
 				return nil, err
 			}
 		}
