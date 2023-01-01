@@ -1,14 +1,17 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/dominikbraun/graph"
 	"github.com/dominikbraun/graph/draw"
+	"github.com/goccy/go-graphviz"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 )
 
@@ -26,14 +29,20 @@ func createGraph(
 ) (graph.Graph[string, string], error) {
 	g := graph.New(graph.StringHash, graph.Directed(), graph.Weighted())
 
-	for swID := range switches {
+	switchKeys := []string{}
+	for k := range switches {
+		switchKeys = append(switchKeys, k)
+	}
+	sort.Strings(switchKeys)
+
+	for _, swID := range switchKeys {
 		if err := g.AddVertex(swID, graph.VertexAttribute("label", fmt.Sprintf("Switch %v", swID))); err != nil {
 			return nil, err
 		}
 	}
 
-	for swID := range switches {
-		for candidateID := range switches {
+	for _, swID := range switchKeys {
+		for _, candidateID := range switchKeys {
 			// Don't link to self
 			if swID == candidateID {
 				continue
@@ -57,7 +66,13 @@ func createGraph(
 		}
 	}
 
-	for aID := range adapters {
+	adapterKeys := []string{}
+	for k := range adapters {
+		adapterKeys = append(adapterKeys, k)
+	}
+	sort.Strings(adapterKeys)
+
+	for _, aID := range adapterKeys {
 		if err := g.AddVertex(aID, graph.VertexAttribute("label", fmt.Sprintf("Adapter %v", aID))); err != nil {
 			return nil, err
 		}
@@ -70,6 +85,7 @@ func createGraph(
 
 type Visualizer struct {
 	verbose bool
+	format  string
 
 	writer     *os.File
 	writerLock sync.Mutex
@@ -77,9 +93,10 @@ type Visualizer struct {
 	Peers func() map[string]MetricsRemote
 }
 
-func NewVisualizer(verbose bool, writer *os.File) *Visualizer {
+func NewVisualizer(verbose bool, format string, writer *os.File) *Visualizer {
 	return &Visualizer{
 		verbose: verbose,
+		format:  format,
 		writer:  writer,
 	}
 }
@@ -115,5 +132,15 @@ func (v *Visualizer) RenderVisualization(
 		return err
 	}
 
-	return draw.DOT(g, v.writer)
+	buf := &bytes.Buffer{}
+	if err := draw.DOT(g, buf); err != nil {
+		return err
+	}
+
+	gv, err := graphviz.ParseBytes(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return graphviz.New().Render(gv, graphviz.Format(v.format), v.writer)
 }
