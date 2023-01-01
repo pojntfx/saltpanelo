@@ -76,6 +76,18 @@ func createGraph(
 		if err := g.AddVertex(aID, graph.VertexAttribute("label", fmt.Sprintf("Adapter %v", aID))); err != nil {
 			return nil, err
 		}
+
+		for swID, latency := range adapters[aID].Latencies {
+			weight := int(latency.Nanoseconds() + adapters[aID].Throughputs[swID].Read.Milliseconds() + adapters[aID].Throughputs[swID].Write.Milliseconds())
+
+			if err := g.AddEdge(swID, aID, graph.EdgeWeight(weight), graph.EdgeAttribute("label", fmt.Sprint(weight))); err != nil {
+				return nil, err
+			}
+
+			if err := g.AddEdge(aID, swID, graph.EdgeWeight(weight), graph.EdgeAttribute("label", fmt.Sprint(weight))); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	// TODO: Add links between adapters and switches
