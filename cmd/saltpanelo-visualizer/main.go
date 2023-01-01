@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"net"
@@ -10,15 +11,27 @@ import (
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/services"
+	"golang.org/x/exp/slices"
+)
+
+var (
+	allowlistedFormats = []string{"dot", "svg", "png", "jpg"}
+
+	errInvalidFormat = errors.New("could not continue with unsupported format")
 )
 
 func main() {
 	raddr := flag.String("raddr", "localhost:1339", "Metric remote address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
-	out := flag.String("out", "saltpanelo.gv", "Path to write the Graphviz file to")
+	out := flag.String("out", "saltpanelo.svg", "Path to write the graph to")
+	format := flag.String("format", "svg", "Format to render as (dot, svg, png or jpg)")
 
 	flag.Parse()
+
+	if !slices.Contains(allowlistedFormats, *format) {
+		panic(errInvalidFormat)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -31,6 +44,7 @@ func main() {
 
 	l := services.NewVisualizer(
 		*verbose,
+		*format,
 		file,
 	)
 	clients := 0
