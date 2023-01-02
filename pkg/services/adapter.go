@@ -17,7 +17,7 @@ type AdapterRemote struct {
 	TestThroughput func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 }
 
-func RequestCall(adapter *Adapter, dstID string) (bool, error) {
+func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
 	return adapter.requestCall(context.Background(), dstID)
 }
 
@@ -55,7 +55,7 @@ func (a *Adapter) RequestCall(
 func (a *Adapter) requestCall(
 	ctx context.Context,
 	dstID string,
-) (bool, error) {
+) (bool, string, error) {
 	if a.verbose {
 		log.Println("Requesting a call with ID", dstID)
 	}
@@ -64,7 +64,7 @@ func (a *Adapter) requestCall(
 		return peer.RequestCall(ctx, dstID)
 	}
 
-	return false, ErrNoPeersFound
+	return false, "", ErrNoPeersFound
 }
 
 func (a *Adapter) TestLatency(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {

@@ -19,7 +19,7 @@ var (
 
 type GatewayRemote struct {
 	RegisterAdapter func(ctx context.Context) error
-	RequestCall     func(ctx context.Context, dstID string) (bool, error)
+	RequestCall     func(ctx context.Context, dstID string) (bool, string, error)
 }
 
 func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) error {
@@ -168,7 +168,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	return g.Router.updateGraph(context.Background())
 }
 
-func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
+func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, error) {
 	remoteID := rpc.GetRemoteID(ctx)
 
 	g.adaptersLock.Lock()
@@ -180,93 +180,103 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, error) {
 	if _, ok := g.adapters[dstID]; !ok {
 		g.adaptersLock.Unlock()
 
-		return false, ErrDstNotFound
+		return false, "", ErrDstNotFound
 	}
 
 	if remoteID == dstID {
 		g.adaptersLock.Unlock()
 
-		return false, ErrDstIsSrc
+		return false, "", ErrDstIsSrc
+	}
+
+	g.adaptersLock.Unlock()
+	var dst *AdapterRemote
+	for candidateID, callee := range g.Peers() {
+		if dstID == candidateID {
+			dst = &callee
+
+			break
+		}
+	}
+	g.adaptersLock.Lock()
+
+	if dst == nil {
+		return false, "", ErrDstNotFound
+	}
+
+	addrs := []string{}
+	swIDs := []string{}
+	for swID, sw := range g.Router.getSwitches() {
+		addrs = append(addrs, sw.Addr)
+		swIDs = append(swIDs, swID)
 	}
 
 	g.adaptersLock.Unlock()
 
-	for candidateID, callee := range g.Peers() {
-		if dstID == candidateID {
-			g.adaptersLock.Lock()
+	accept, err := dst.RequestCall(
+		ctx,
+		remoteID,
+	)
+	if err != nil {
+		return false, "", err
+	}
 
-			addrs := []string{}
-			swIDs := []string{}
-			for swID, sw := range g.Router.getSwitches() {
-				addrs = append(addrs, sw.Addr)
-				swIDs = append(swIDs, swID)
-			}
+	if !accept {
+		return false, "", nil
+	}
 
-			g.adaptersLock.Unlock()
+	var caller AdapterRemote
+	found := false
+	for candidateID, candidatePeer := range g.Peers() {
+		if remoteID == candidateID {
+			caller = candidatePeer
 
-			accept, err := callee.RequestCall(
-				ctx,
-				remoteID,
-			)
-			if err != nil {
-				return false, err
-			}
+			found = true
 
-			if !accept {
-				return false, nil
-			}
-
-			var caller AdapterRemote
-			found := false
-			for candidateID, candidatePeer := range g.Peers() {
-				if remoteID == candidateID {
-					caller = candidatePeer
-
-					found = true
-
-					break
-				}
-			}
-
-			if !found {
-				return false, ErrSrcNotFound
-			}
-
-			if err := g.refreshPeerLatency(
-				ctx,
-
-				callee,
-				candidateID,
-
-				addrs,
-				swIDs,
-			); err != nil {
-				return false, err
-			}
-
-			if err := g.refreshPeerLatency(
-				ctx,
-
-				caller,
-				remoteID,
-
-				addrs,
-				swIDs,
-			); err != nil {
-				return false, err
-			}
-
-			if g.verbose {
-				log.Println("Finished requesting call for ID", candidateID)
-			}
-
-			if err := g.Router.updateGraph(context.Background()); err != nil {
-				return false, err
-			}
-
-			return true, nil
+			break
 		}
 	}
 
-	return false, ErrDstNotFound
+	if !found {
+		return false, "", ErrSrcNotFound
+	}
+
+	if err := g.refreshPeerLatency(
+		ctx,
+
+		*dst,
+		dstID,
+
+		addrs,
+		swIDs,
+	); err != nil {
+		return false, "", err
+	}
+
+	if err := g.refreshPeerLatency(
+		ctx,
+
+		caller,
+		remoteID,
+
+		addrs,
+		swIDs,
+	); err != nil {
+		return false, "", err
+	}
+
+	if g.verbose {
+		log.Println("Finished requesting call for ID", dstID)
+	}
+
+	if err := g.Router.updateGraph(context.Background()); err != nil {
+		return false, "", err
+	}
+
+	routeID, err := g.Router.provisionRoute(remoteID, dstID)
+	if err != nil {
+		return false, "", err
+	}
+
+	return true, routeID, nil
 }
