@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/dominikbraun/graph"
+	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -16,6 +18,7 @@ var (
 	ErrAdapterAlreadyRegistered = errors.New("could not register adapter: An adapter with this remote ID is already registered")
 	ErrDstNotFound              = errors.New("could not find destination")
 	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
+	ErrRouteNotFound            = errors.New("could not find route")
 )
 
 type RouterRemote struct {
@@ -23,6 +26,12 @@ type RouterRemote struct {
 }
 
 func HandleRouterClientDisconnect(router *Router, remoteID string) error {
+	go func() {
+		if err := router.unprovisionRouteForSwitch(remoteID); err != nil {
+			log.Println("Could visualize unprovision route for switch with ID", remoteID, ", continuing:", err)
+		}
+	}()
+
 	return router.onClientDisconnect(remoteID)
 }
 
@@ -52,6 +61,9 @@ type Router struct {
 	graphLock sync.Mutex
 	graph     graph.Graph[string, string]
 
+	routesLock sync.Mutex
+	routes     map[string][]string
+
 	verbose bool
 
 	Peers func() map[string]SwitchRemote
@@ -76,6 +88,8 @@ func NewRouter(
 		throughputChunks: throughputChunks,
 
 		graph: graph.New(graph.StringHash, graph.Directed(), graph.Weighted()),
+
+		routes: map[string][]string{},
 
 		verbose: verbose,
 	}
@@ -262,6 +276,78 @@ func (r *Router) getSwitches() map[string]SwitchMetadata {
 	}
 
 	return a
+}
+
+func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
+	r.graphLock.Lock()
+
+	path, err := graph.ShortestPath(r.graph, srcID, dstID)
+	if err != nil {
+		r.graphLock.Unlock()
+
+		return "", err
+	}
+
+	if len(path) < 3 {
+		r.graphLock.Unlock()
+
+		return "", ErrRouteNotFound
+	}
+
+	r.graphLock.Unlock()
+
+	routeID := uuid.NewString()
+
+	// TODO: `dial` in adapters & switches for route with `routeID`
+
+	r.routesLock.Lock()
+	r.routes[routeID] = path
+	r.routesLock.Unlock()
+
+	return routeID, nil
+}
+
+func (r *Router) unprovisionRouteForSwitch(swID string) error {
+	r.routesLock.Lock()
+
+	switchesToClose := map[string][]SwitchRemote{}
+	peers := r.Peers()
+
+	for routeID, route := range r.routes {
+		if slices.Contains(route, swID) {
+			for _, candidateID := range route {
+				if swID != candidateID {
+					// Don't call `close` on the switch with `swID` as its already disconnected at this point
+					continue
+				}
+
+				sw, ok := peers[candidateID]
+				if !ok {
+					log.Println("Could not find switch with ID", swID, "to close route for, continuing")
+
+					r.switchesLock.Unlock()
+
+					continue
+				}
+
+				if _, ok := switchesToClose[routeID]; !ok {
+					switchesToClose[routeID] = []SwitchRemote{}
+				}
+
+				switchesToClose[routeID] = append(switchesToClose[routeID], sw)
+			}
+
+			delete(r.routes, routeID)
+		}
+	}
+
+	r.routesLock.Unlock()
+
+	// for routeID, sw := range switchesToClose {
+	// 	// TODO: Close connection with `routeID` on switch
+	// }
+
+	return nil
 }
 
 func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
