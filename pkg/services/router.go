@@ -28,7 +28,7 @@ type RouterRemote struct {
 func HandleRouterClientDisconnect(router *Router, remoteID string) error {
 	go func() {
 		if err := router.unprovisionRouteForSwitch(remoteID); err != nil {
-			log.Println("Could visualize unprovision route for switch with ID", remoteID, ", continuing:", err)
+			log.Println("Could not unprovision route for switch with ID", remoteID, ", continuing:", err)
 		}
 	}()
 
@@ -279,6 +279,10 @@ func (r *Router) getSwitches() map[string]SwitchMetadata {
 }
 
 func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
+	if r.verbose {
+		log.Println("Provisioning route from", srcID, "to", dstID)
+	}
+
 	r.graphLock.Lock()
 
 	path, err := graph.ShortestPath(r.graph, srcID, dstID)
@@ -298,7 +302,8 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 	routeID := uuid.NewString()
 
-	// TODO: `dial` in adapters & switches for route with `routeID`
+	// TODO: Call `ProvisionRoute` in adapters & switches for route with `routeID`
+	// (On switches) It should dial `srcAddr` and create `net.Listener` that is being copied to/from `srcAddr`, then return that port
 
 	r.routesLock.Lock()
 	r.routes[routeID] = path
@@ -307,7 +312,12 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	return routeID, nil
 }
 
+// TODO: Add same handler for adapters
 func (r *Router) unprovisionRouteForSwitch(swID string) error {
+	if r.verbose {
+		log.Println("Unprovisioning all routes for switch", swID)
+	}
+
 	r.routesLock.Lock()
 
 	switchesToClose := map[string][]SwitchRemote{}
@@ -325,8 +335,6 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 				if !ok {
 					log.Println("Could not find switch with ID", swID, "to close route for, continuing")
 
-					r.switchesLock.Unlock()
-
 					continue
 				}
 
@@ -343,9 +351,23 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 
 	r.routesLock.Unlock()
 
-	// for routeID, sw := range switchesToClose {
-	// 	// TODO: Close connection with `routeID` on switch
-	// }
+	var wg sync.WaitGroup
+
+	for routeID, switches := range switchesToClose {
+		for _, sw := range switches {
+			wg.Add(1)
+
+			go func(routeID string, sw SwitchRemote) {
+				defer wg.Done()
+
+				if err := sw.UnprovisionRoute(context.Background(), routeID); err != nil {
+					log.Println("Could not unprovision route", routeID, "for switch with ID", swID, ", continuing:", err)
+				}
+			}(routeID, sw)
+		}
+	}
+
+	wg.Wait()
 
 	return nil
 }

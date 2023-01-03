@@ -11,8 +11,9 @@ import (
 )
 
 type SwitchRemote struct {
-	TestLatency    func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
-	TestThroughput func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	UnprovisionRoute func(ctx context.Context, routeID string) error
 }
 
 type ThroughputResult struct {
@@ -46,6 +47,16 @@ func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addr
 	}
 
 	return testThroughput(timeout, addrs, length, chunks)
+}
+
+func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
+	if s.verbose {
+		log.Println("Unprovisioning route with ID", routeID)
+	}
+
+	// TODO: Close locally provisioned connection
+
+	return nil
 }
 
 func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error) {
