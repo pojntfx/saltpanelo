@@ -24,7 +24,8 @@ func main() {
 	raddr := flag.String("raddr", "localhost:1339", "Metric remote address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
-	out := flag.String("out", "saltpanelo.svg", "Path to write the graph to")
+	networkOut := flag.String("network-out", "saltpanelo-network.svg", "Path to write the network graph to")
+	routesOut := flag.String("routes-out", "saltpanelo-routes.svg", "Path to write the active routes graph to")
 	format := flag.String("format", "svg", "Format to render as (dot, svg, png or jpg)")
 
 	flag.Parse()
@@ -36,16 +37,23 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	file, err := os.Create(*out)
+	networkFile, err := os.Create(*networkOut)
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
+	defer networkFile.Close()
+
+	routesFile, err := os.Create(*routesOut)
+	if err != nil {
+		panic(err)
+	}
+	defer routesFile.Close()
 
 	l := services.NewVisualizer(
 		*verbose,
 		*format,
-		file,
+		networkFile,
+		routesFile,
 	)
 	clients := 0
 	registry := rpc.NewRegistry(

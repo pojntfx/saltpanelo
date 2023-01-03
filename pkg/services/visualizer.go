@@ -17,14 +17,18 @@ import (
 )
 
 type VisualizerRemote struct {
-	RenderVisualization func(
+	RenderNetworkVisualization func(
 		ctx context.Context,
 		switches map[string]SwitchMetadata,
 		adapters map[string]AdapterMetadata,
 	) error
+	RenderRoutesVisualization func(
+		ctx context.Context,
+		routes map[string][]string,
+	) error
 }
 
-func createGraph(
+func createNetworkGraph(
 	switches map[string]SwitchMetadata,
 	adapters map[string]AdapterMetadata,
 ) (graph.Graph[string, string], error) {
@@ -102,51 +106,93 @@ func createGraph(
 	return g, nil
 }
 
+func createRoutesGraph(
+	routes map[string][]string,
+) (graph.Graph[string, string], error) {
+	g := graph.New(graph.StringHash, graph.Directed())
+
+	for routeID, route := range routes {
+		for i, swID := range route {
+			if _, err := g.Vertex(swID); err != nil {
+				if errors.Is(err, graph.ErrEdgeNotFound) {
+					label := fmt.Sprintf("Switch %v", swID)
+					if i == 0 || i == len(route)-1 {
+						label = fmt.Sprintf("Adapter %v", swID)
+					}
+
+					if err := g.AddVertex(swID, graph.VertexAttribute("label", label)); err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, err
+				}
+			}
+
+			if i != 0 {
+				if err := g.AddEdge(swID, route[i-1], graph.EdgeAttribute("label", routeID)); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	return g, nil
+}
+
 type Visualizer struct {
 	verbose bool
 	format  string
 
-	writer     *os.File
-	writerLock sync.Mutex
+	networkFile     *os.File
+	networkFileLock sync.Mutex
+
+	routesFile     *os.File
+	routesFileLock sync.Mutex
 
 	Peers func() map[string]MetricsRemote
 }
 
-func NewVisualizer(verbose bool, format string, writer *os.File) *Visualizer {
+func NewVisualizer(
+	verbose bool,
+	format string,
+	networkFile *os.File,
+	routesFile *os.File,
+) *Visualizer {
 	return &Visualizer{
-		verbose: verbose,
-		format:  format,
-		writer:  writer,
+		verbose:     verbose,
+		format:      format,
+		networkFile: networkFile,
+		routesFile:  routesFile,
 	}
 }
 
-func (v *Visualizer) RenderVisualization(
+func (v *Visualizer) RenderNetworkVisualization(
 	ctx context.Context,
 	switches map[string]SwitchMetadata,
 	adapters map[string]AdapterMetadata,
 ) error {
-	v.writerLock.Lock()
-	defer v.writerLock.Unlock()
+	v.networkFileLock.Lock()
+	defer v.networkFileLock.Unlock()
 
 	remoteID := rpc.GetRemoteID(ctx)
 
 	if v.verbose {
-		log.Println("Rendering graph visualization for metrics service with ID", remoteID)
+		log.Println("Rendering network graph visualization for metrics service with ID", remoteID)
 	}
 
-	g, err := createGraph(switches, adapters)
+	g, err := createNetworkGraph(switches, adapters)
 	if err != nil {
 		return err
 	}
 
-	if err := v.writer.Truncate(0); err != nil {
-		v.writerLock.Unlock()
+	if err := v.networkFile.Truncate(0); err != nil {
+		v.networkFileLock.Unlock()
 
 		return err
 	}
 
-	if _, err := v.writer.Seek(0, 0); err != nil {
-		v.writerLock.Unlock()
+	if _, err := v.networkFile.Seek(0, 0); err != nil {
+		v.networkFileLock.Unlock()
 
 		return err
 	}
@@ -161,5 +207,48 @@ func (v *Visualizer) RenderVisualization(
 		return err
 	}
 
-	return graphviz.New().Render(gv, graphviz.Format(v.format), v.writer)
+	return graphviz.New().Render(gv, graphviz.Format(v.format), v.networkFile)
+}
+
+func (v *Visualizer) RenderRoutesVisualization(
+	ctx context.Context,
+	routes map[string][]string,
+) error {
+	v.routesFileLock.Lock()
+	defer v.routesFileLock.Unlock()
+
+	remoteID := rpc.GetRemoteID(ctx)
+
+	if v.verbose {
+		log.Println("Rendering routes graph visualization for metrics service with ID", remoteID)
+	}
+
+	g, err := createRoutesGraph(routes)
+	if err != nil {
+		return err
+	}
+
+	if err := v.routesFile.Truncate(0); err != nil {
+		v.routesFileLock.Unlock()
+
+		return err
+	}
+
+	if _, err := v.routesFile.Seek(0, 0); err != nil {
+		v.routesFileLock.Unlock()
+
+		return err
+	}
+
+	buf := &bytes.Buffer{}
+	if err := draw.DOT(g, buf); err != nil {
+		return err
+	}
+
+	gv, err := graphviz.ParseBytes(buf.Bytes())
+	if err != nil {
+		return err
+	}
+
+	return graphviz.New().Render(gv, graphviz.Format(v.format), v.routesFile)
 }

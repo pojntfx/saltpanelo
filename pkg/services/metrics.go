@@ -8,7 +8,7 @@ import (
 type MetricsRemote struct{}
 
 func HandleMetricsClientConnect(router *Router) error {
-	return router.updateGraph(context.Background())
+	return router.updateGraphs(context.Background())
 }
 
 type Metrics struct {
@@ -27,13 +27,18 @@ func (m *Metrics) visualize(
 	ctx context.Context,
 	switches map[string]SwitchMetadata,
 	adapters map[string]AdapterMetadata,
+	routes map[string][]string,
 ) error {
 	for remoteID, peer := range m.Peers() {
 		if m.verbose {
 			log.Println("Visualizing graph for peer with ID", remoteID)
 		}
 
-		if err := peer.RenderVisualization(ctx, switches, adapters); err != nil {
+		if err := peer.RenderNetworkVisualization(ctx, switches, adapters); err != nil {
+			return err
+		}
+
+		if err := peer.RenderRoutesVisualization(ctx, routes); err != nil {
 			return err
 		}
 	}
