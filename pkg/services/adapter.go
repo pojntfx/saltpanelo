@@ -61,7 +61,12 @@ func (a *Adapter) requestCall(
 	}
 
 	for _, peer := range a.Peers() {
-		return peer.RequestCall(ctx, dstID)
+		requestCallResult, err := peer.RequestCall(ctx, dstID)
+		if err != nil {
+			return false, "", err
+		}
+
+		return requestCallResult.Accept, requestCallResult.RouteID, nil
 	}
 
 	return false, "", ErrNoPeersFound

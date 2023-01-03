@@ -114,15 +114,15 @@ func main() {
 			}
 
 			for _, peer := range l.Peers() {
-				accept, routeID, err := peer.RequestCall(ctx, dstID)
+				requestCallResult, err := peer.RequestCall(ctx, dstID)
 				if err != nil {
 					errs <- err
 
 					return
 				}
 
-				if accept {
-					if err := zenity.Info(fmt.Sprintf("Callee answered the call with route ID %v", routeID)); err != nil {
+				if requestCallResult.Accept {
+					if err := zenity.Info(fmt.Sprintf("Callee answered the call with route ID %v", requestCallResult.RouteID)); err != nil {
 						errs <- err
 
 						return

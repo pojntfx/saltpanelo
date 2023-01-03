@@ -19,7 +19,12 @@ var (
 
 type GatewayRemote struct {
 	RegisterAdapter func(ctx context.Context) error
-	RequestCall     func(ctx context.Context, dstID string) (bool, string, error)
+	RequestCall     func(ctx context.Context, dstID string) (RequestCallResult, error)
+}
+
+type RequestCallResult struct {
+	Accept  bool
+	RouteID string
 }
 
 func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) error {
@@ -168,7 +173,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	return g.Router.updateGraph(context.Background())
 }
 
-func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, error) {
+func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallResult, error) {
 	remoteID := rpc.GetRemoteID(ctx)
 
 	g.adaptersLock.Lock()
@@ -180,13 +185,13 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 	if _, ok := g.adapters[dstID]; !ok {
 		g.adaptersLock.Unlock()
 
-		return false, "", ErrDstNotFound
+		return RequestCallResult{}, ErrDstNotFound
 	}
 
 	if remoteID == dstID {
 		g.adaptersLock.Unlock()
 
-		return false, "", ErrDstIsSrc
+		return RequestCallResult{}, ErrDstIsSrc
 	}
 
 	g.adaptersLock.Unlock()
@@ -201,7 +206,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 	g.adaptersLock.Lock()
 
 	if dst == nil {
-		return false, "", ErrDstNotFound
+		return RequestCallResult{}, ErrDstNotFound
 	}
 
 	addrs := []string{}
@@ -218,11 +223,11 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 		remoteID,
 	)
 	if err != nil {
-		return false, "", err
+		return RequestCallResult{}, err
 	}
 
 	if !accept {
-		return false, "", nil
+		return RequestCallResult{}, nil
 	}
 
 	var caller AdapterRemote
@@ -238,7 +243,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 	}
 
 	if !found {
-		return false, "", ErrSrcNotFound
+		return RequestCallResult{}, ErrSrcNotFound
 	}
 
 	if err := g.refreshPeerLatency(
@@ -250,7 +255,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 		addrs,
 		swIDs,
 	); err != nil {
-		return false, "", err
+		return RequestCallResult{}, err
 	}
 
 	if err := g.refreshPeerLatency(
@@ -262,7 +267,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 		addrs,
 		swIDs,
 	); err != nil {
-		return false, "", err
+		return RequestCallResult{}, err
 	}
 
 	if g.verbose {
@@ -270,13 +275,16 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (bool, string, 
 	}
 
 	if err := g.Router.updateGraph(context.Background()); err != nil {
-		return false, "", err
+		return RequestCallResult{}, err
 	}
 
 	routeID, err := g.Router.provisionRoute(remoteID, dstID)
 	if err != nil {
-		return false, "", err
+		return RequestCallResult{}, err
 	}
 
-	return true, routeID, nil
+	return RequestCallResult{
+		Accept:  true,
+		RouteID: routeID,
+	}, nil
 }

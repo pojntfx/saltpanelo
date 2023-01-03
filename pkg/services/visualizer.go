@@ -99,8 +99,6 @@ func createGraph(
 		}
 	}
 
-	// TODO: Add links between adapters and switches
-
 	return g, nil
 }
 
