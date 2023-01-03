@@ -68,7 +68,7 @@ func (g *Gateway) onClientDisconnect(remoteID string) error {
 		log.Println("Removed adapter with ID", remoteID, "from topology")
 	}
 
-	return g.Router.updateGraph(context.Background())
+	return g.Router.updateGraphs(context.Background())
 }
 
 func (g *Gateway) getAdapters() map[string]AdapterMetadata {
@@ -170,7 +170,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 
 	g.adaptersLock.Unlock()
 
-	return g.Router.updateGraph(context.Background())
+	return g.Router.updateGraphs(context.Background())
 }
 
 func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallResult, error) {
@@ -274,7 +274,7 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallRes
 		log.Println("Finished requesting call for ID", dstID)
 	}
 
-	if err := g.Router.updateGraph(context.Background()); err != nil {
+	if err := g.Router.updateGraphs(context.Background()); err != nil {
 		return RequestCallResult{}, err
 	}
 

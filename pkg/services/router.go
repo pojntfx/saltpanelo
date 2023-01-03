@@ -95,7 +95,7 @@ func NewRouter(
 	}
 }
 
-func (r *Router) updateGraph(ctx context.Context) error {
+func (r *Router) updateGraphs(ctx context.Context) error {
 	r.switchesLock.Lock()
 
 	s := map[string]SwitchMetadata{}
@@ -107,7 +107,7 @@ func (r *Router) updateGraph(ctx context.Context) error {
 
 	a := r.Gateway.getAdapters()
 
-	g, err := createGraph(s, a)
+	g, err := createNetworkGraph(s, a)
 	if err != nil {
 		return err
 	}
@@ -116,8 +116,17 @@ func (r *Router) updateGraph(ctx context.Context) error {
 	r.graph = g
 	r.graphLock.Unlock()
 
+	r.routesLock.Lock()
+
+	routes := map[string][]string{}
+	for k, v := range r.routes {
+		routes[k] = v
+	}
+
+	r.routesLock.Unlock()
+
 	go func() {
-		if err := r.Metrics.visualize(ctx, s, a); err != nil {
+		if err := r.Metrics.visualize(ctx, s, a, routes); err != nil {
 			log.Println("Could visualize graph, continuing:", err)
 		}
 	}()
@@ -136,7 +145,7 @@ func (r *Router) onClientDisconnect(remoteID string) error {
 		log.Println("Removed switch with ID", remoteID, "from topology")
 	}
 
-	return r.updateGraph(context.Background())
+	return r.updateGraphs(context.Background())
 }
 
 func (r *Router) onOpen() {
@@ -207,7 +216,7 @@ func (r *Router) onOpen() {
 					log.Println("Finished latency tests for switch with ID", remoteID, ":", sm.Latencies)
 				}
 
-				if err := r.updateGraph(context.Background()); err != nil {
+				if err := r.updateGraphs(context.Background()); err != nil {
 					log.Println("Could not update graph, continuing:", err)
 				}
 			}(remoteID, peer)
@@ -256,7 +265,7 @@ func (r *Router) onOpen() {
 					log.Println("Finished throughput tests for switch with ID", remoteID, ":", sm.Throughputs)
 				}
 
-				if err := r.updateGraph(context.Background()); err != nil {
+				if err := r.updateGraphs(context.Background()); err != nil {
 					log.Println("Could not update graph, continuing:", err)
 				}
 			}(remoteID, peer)
@@ -395,5 +404,5 @@ func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
 
 	r.switchesLock.Unlock()
 
-	return r.updateGraph(context.Background())
+	return r.updateGraphs(context.Background())
 }
