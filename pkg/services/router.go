@@ -318,6 +318,10 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	r.routes[routeID] = path
 	r.routesLock.Unlock()
 
+	if err := r.updateGraphs(context.Background()); err != nil {
+		return "", err
+	}
+
 	return routeID, nil
 }
 
@@ -360,10 +364,6 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 
 	r.routesLock.Unlock()
 
-	if err := r.updateGraphs(context.Background()); err != nil {
-		return err
-	}
-
 	var wg sync.WaitGroup
 
 	for routeID, switches := range switchesToClose {
@@ -381,6 +381,10 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 	}
 
 	wg.Wait()
+
+	if err := r.updateGraphs(context.Background()); err != nil {
+		return err
+	}
 
 	return nil
 }

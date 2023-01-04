@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"log"
 	"net"
@@ -11,13 +10,6 @@ import (
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/services"
-	"golang.org/x/exp/slices"
-)
-
-var (
-	allowlistedFormats = []string{"dot", "svg", "png", "jpg"}
-
-	errInvalidFormat = errors.New("could not continue with unsupported format")
 )
 
 func main() {
@@ -26,13 +18,9 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	networkOut := flag.String("network-out", "saltpanelo-network.svg", "Path to write the network graph to")
 	routesOut := flag.String("routes-out", "saltpanelo-routes.svg", "Path to write the active routes graph to")
-	format := flag.String("format", "svg", "Format to render as (dot, svg, png or jpg)")
+	command := flag.String("command", "dot -T svg", "Command to pipe the Graphviz output through before writing (an empty command writes Graphviz output directly)")
 
 	flag.Parse()
-
-	if !slices.Contains(allowlistedFormats, *format) {
-		panic(errInvalidFormat)
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -51,9 +39,9 @@ func main() {
 
 	l := services.NewVisualizer(
 		*verbose,
-		*format,
 		networkFile,
 		routesFile,
+		*command,
 	)
 	clients := 0
 	registry := rpc.NewRegistry(

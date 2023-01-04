@@ -12,8 +12,8 @@ import (
 
 	"github.com/dominikbraun/graph"
 	"github.com/dominikbraun/graph/draw"
-	"github.com/goccy/go-graphviz"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
 
 type VisualizerRemote struct {
@@ -113,23 +113,21 @@ func createRoutesGraph(
 
 	for routeID, route := range routes {
 		for i, swID := range route {
-			if _, err := g.Vertex(swID); err != nil {
-				if errors.Is(err, graph.ErrEdgeNotFound) {
-					label := fmt.Sprintf("Switch %v", swID)
-					if i == 0 || i == len(route)-1 {
-						label = fmt.Sprintf("Adapter %v", swID)
-					}
+			label := fmt.Sprintf("Switch %v", swID)
+			if i == 0 || i == len(route)-1 {
+				label = fmt.Sprintf("Adapter %v", swID)
+			}
 
-					if err := g.AddVertex(swID, graph.VertexAttribute("label", label)); err != nil {
-						return nil, err
-					}
-				} else {
-					return nil, err
-				}
+			if err := g.AddVertex(swID, graph.VertexAttribute("label", label)); err != nil && !errors.Is(err, graph.ErrVertexAlreadyExists) {
+				return nil, err
 			}
 
 			if i != 0 {
 				if err := g.AddEdge(swID, route[i-1], graph.EdgeAttribute("label", routeID)); err != nil {
+					if errors.Is(err, graph.ErrVertexNotFound) {
+						continue
+					}
+
 					return nil, err
 				}
 			}
@@ -141,7 +139,6 @@ func createRoutesGraph(
 
 type Visualizer struct {
 	verbose bool
-	format  string
 
 	networkFile     *os.File
 	networkFileLock sync.Mutex
@@ -149,20 +146,22 @@ type Visualizer struct {
 	routesFile     *os.File
 	routesFileLock sync.Mutex
 
+	command string
+
 	Peers func() map[string]MetricsRemote
 }
 
 func NewVisualizer(
 	verbose bool,
-	format string,
 	networkFile *os.File,
 	routesFile *os.File,
+	command string,
 ) *Visualizer {
 	return &Visualizer{
 		verbose:     verbose,
-		format:      format,
 		networkFile: networkFile,
 		routesFile:  routesFile,
+		command:     command,
 	}
 }
 
@@ -202,12 +201,7 @@ func (v *Visualizer) RenderNetworkVisualization(
 		return err
 	}
 
-	gv, err := graphviz.ParseBytes(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return graphviz.New().Render(gv, graphviz.Format(v.format), v.networkFile)
+	return utils.PipeShellCommand(v.command, buf, v.networkFile)
 }
 
 func (v *Visualizer) RenderRoutesVisualization(
@@ -245,10 +239,5 @@ func (v *Visualizer) RenderRoutesVisualization(
 		return err
 	}
 
-	gv, err := graphviz.ParseBytes(buf.Bytes())
-	if err != nil {
-		return err
-	}
-
-	return graphviz.New().Render(gv, graphviz.Format(v.format), v.routesFile)
+	return utils.PipeShellCommand(v.command, buf, v.routesFile)
 }
