@@ -283,10 +283,6 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallRes
 		return RequestCallResult{}, err
 	}
 
-	if err := g.Router.updateGraphs(context.Background()); err != nil {
-		return RequestCallResult{}, err
-	}
-
 	return RequestCallResult{
 		Accept:  true,
 		RouteID: routeID,
