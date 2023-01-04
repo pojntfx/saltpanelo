@@ -335,7 +335,7 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 	for routeID, route := range r.routes {
 		if slices.Contains(route, swID) {
 			for _, candidateID := range route {
-				if swID != candidateID {
+				if swID == candidateID {
 					// Don't call `close` on the switch with `swID` as its already disconnected at this point
 					continue
 				}
@@ -359,6 +359,10 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 	}
 
 	r.routesLock.Unlock()
+
+	if err := r.updateGraphs(context.Background()); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 
