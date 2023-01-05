@@ -86,7 +86,7 @@ func main() {
 
 				log.Printf("%v clients connected to router", routerClients)
 
-				if err := services.HandleRouterClientDisconnect(router, remoteID); err != nil {
+				if err := services.HandleRouterClientDisconnect(router, gateway, remoteID); err != nil {
 					log.Println("Could not handle router client disconnected, continuing:", err)
 				}
 			},
@@ -113,7 +113,7 @@ func main() {
 
 				log.Printf("%v clients connected to gateway", gatewayClients)
 
-				if err := services.HandleGatewayClientDisconnect(gateway, remoteID); err != nil {
+				if err := services.HandleGatewayClientDisconnect(router, gateway, remoteID); err != nil {
 					log.Println("Could not handle gateway client disconnected, continuing:", err)
 				}
 			},

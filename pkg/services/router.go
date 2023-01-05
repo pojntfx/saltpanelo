@@ -19,20 +19,21 @@ var (
 	ErrDstNotFound              = errors.New("could not find destination")
 	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
 	ErrRouteNotFound            = errors.New("could not find route")
+	ErrInvalidUnprovisioner     = errors.New("could not unprovision invalid unprovisioner")
 )
 
 type RouterRemote struct {
 	RegisterSwitch func(ctx context.Context, addr string) error
 }
 
-func HandleRouterClientDisconnect(router *Router, remoteID string) error {
+func HandleRouterClientDisconnect(r *Router, g *Gateway, remoteID string) error {
 	go func() {
-		if err := router.unprovisionRouteForSwitch(remoteID); err != nil {
+		if err := unprovisionRouteForPeer(r, g, remoteID); err != nil {
 			log.Println("Could not unprovision route for switch with ID", remoteID, ", continuing:", err)
 		}
 	}()
 
-	return router.onClientDisconnect(remoteID)
+	return r.onClientDisconnect(remoteID)
 }
 
 func HandleRouterOpen(router *Router) {
@@ -325,37 +326,42 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	return routeID, nil
 }
 
-// TODO: Add same handler for adapters
-func (r *Router) unprovisionRouteForSwitch(swID string) error {
+func unprovisionRouteForPeer(r *Router, g *Gateway, remoteID string) error {
 	if r.verbose {
-		log.Println("Unprovisioning all routes for switch", swID)
+		log.Println("Unprovisioning all routes for peer", remoteID)
 	}
 
 	r.routesLock.Lock()
 
+	routerPeers := r.Peers()
+	gatewayPeers := g.Peers()
+
 	switchesToClose := map[string][]SwitchRemote{}
-	peers := r.Peers()
+	adaptersToClose := map[string][]AdapterRemote{}
 
 	for routeID, route := range r.routes {
-		if slices.Contains(route, swID) {
+		if slices.Contains(route, remoteID) {
 			for _, candidateID := range route {
-				if swID == candidateID {
-					// Don't call `close` on the switch with `swID` as its already disconnected at this point
+				if remoteID == candidateID {
+					// Don't call `close` on the peer with `remoteID` as its already disconnected at this point
 					continue
 				}
 
-				sw, ok := peers[candidateID]
-				if !ok {
-					log.Println("Could not find switch with ID", swID, "to close route for, continuing")
+				if sw, ok := routerPeers[candidateID]; ok {
+					if _, ok := switchesToClose[routeID]; !ok {
+						switchesToClose[routeID] = []SwitchRemote{}
+					}
 
-					continue
+					switchesToClose[routeID] = append(switchesToClose[routeID], sw)
 				}
 
-				if _, ok := switchesToClose[routeID]; !ok {
-					switchesToClose[routeID] = []SwitchRemote{}
-				}
+				if ad, ok := gatewayPeers[candidateID]; ok {
+					if _, ok := adaptersToClose[routeID]; !ok {
+						adaptersToClose[routeID] = []AdapterRemote{}
+					}
 
-				switchesToClose[routeID] = append(switchesToClose[routeID], sw)
+					adaptersToClose[routeID] = append(adaptersToClose[routeID], ad)
+				}
 			}
 
 			delete(r.routes, routeID)
@@ -366,17 +372,31 @@ func (r *Router) unprovisionRouteForSwitch(swID string) error {
 
 	var wg sync.WaitGroup
 
-	for routeID, switches := range switchesToClose {
-		for _, sw := range switches {
+	for routeID, peers := range switchesToClose {
+		for _, sw := range peers {
 			wg.Add(1)
 
 			go func(routeID string, sw SwitchRemote) {
 				defer wg.Done()
 
 				if err := sw.UnprovisionRoute(context.Background(), routeID); err != nil {
-					log.Println("Could not unprovision route", routeID, "for switch with ID", swID, ", continuing:", err)
+					log.Println("Could not unprovision route", routeID, "for switch with ID", remoteID, ", continuing:", err)
 				}
 			}(routeID, sw)
+		}
+	}
+
+	for routeID, peers := range adaptersToClose {
+		for _, ad := range peers {
+			wg.Add(1)
+
+			go func(routeID string, ad AdapterRemote) {
+				defer wg.Done()
+
+				if err := ad.UnprovisionRoute(context.Background(), routeID); err != nil {
+					log.Println("Could not unprovision route", routeID, "for adapter with ID", remoteID, ", continuing:", err)
+				}
+			}(routeID, ad)
 		}
 	}
 
