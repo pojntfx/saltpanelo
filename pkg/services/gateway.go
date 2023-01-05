@@ -27,8 +27,14 @@ type RequestCallResult struct {
 	RouteID string
 }
 
-func HandleGatewayClientDisconnect(gateway *Gateway, remoteID string) error {
-	return gateway.onClientDisconnect(remoteID)
+func HandleGatewayClientDisconnect(r *Router, g *Gateway, remoteID string) error {
+	go func() {
+		if err := unprovisionRouteForPeer(r, g, remoteID); err != nil {
+			log.Println("Could not unprovision route for switch with ID", remoteID, ", continuing:", err)
+		}
+	}()
+
+	return g.onClientDisconnect(remoteID)
 }
 
 type AdapterMetadata struct {

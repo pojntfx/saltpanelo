@@ -12,9 +12,10 @@ var (
 )
 
 type AdapterRemote struct {
-	RequestCall    func(ctx context.Context, srcID string) (bool, error)
-	TestLatency    func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
-	TestThroughput func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	RequestCall      func(ctx context.Context, srcID string) (bool, error)
+	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	UnprovisionRoute func(ctx context.Context, routeID string) error
 }
 
 func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
@@ -86,4 +87,14 @@ func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, add
 	}
 
 	return testThroughput(timeout, addrs, length, chunks)
+}
+
+func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
+	if a.verbose {
+		log.Println("Unprovisioning route with ID", routeID)
+	}
+
+	// TODO: Close locally provisioned connection
+
+	return nil
 }
