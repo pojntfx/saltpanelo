@@ -25,7 +25,8 @@ func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
 type Adapter struct {
 	verbose bool
 
-	onRequestCall func(ctx context.Context, srcID string) (bool, error)
+	onRequestCall      func(ctx context.Context, srcID string) (bool, error)
+	onCallDisconnected func(ctx context.Context, routeID string) error
 
 	Peers func() map[string]GatewayRemote
 }
@@ -34,11 +35,13 @@ func NewAdapter(
 	verbose bool,
 
 	onRequestCall func(ctx context.Context, srcID string) (bool, error),
+	onCallDisconnected func(ctx context.Context, routeID string) error,
 ) *Adapter {
 	return &Adapter{
 		verbose: verbose,
 
-		onRequestCall: onRequestCall,
+		onRequestCall:      onRequestCall,
+		onCallDisconnected: onCallDisconnected,
 	}
 }
 
@@ -96,5 +99,5 @@ func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
 
 	// TODO: Close locally provisioned connection
 
-	return nil
+	return a.onCallDisconnected(ctx, routeID)
 }
