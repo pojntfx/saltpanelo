@@ -319,7 +319,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 	switchesToProvision := []SwitchRemote{}
 	switchMetadata := []SwitchMetadata{}
-	for _, swID := range path[1 : len(path)-2] {
+	for _, swID := range path[1 : len(path)-1] {
 		sw, ok := routerPeers[swID]
 		if !ok {
 			return "", ErrSwitchNotFound
@@ -366,7 +366,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		return "", err
 	}
 
-	if err := src.ProvisionRoute(context.Background(), routeID, switchMetadata[0].Addr); err != nil {
+	if err := src.ProvisionRoute(context.Background(), routeID, switchMetadata[len(switchMetadata)-1].Addr); err != nil {
 		return "", err
 	}
 

@@ -167,10 +167,8 @@ func main() {
 				}
 
 				if requestCallResult.Accept {
-					if err := zenity.Info(fmt.Sprintf("Callee answered the call with route ID %v", requestCallResult.RouteID)); err != nil {
-						errs <- err
-
-						return
+					if *verbose {
+						log.Println("Callee answered the call with route ID", requestCallResult.RouteID)
 					}
 				} else {
 					if err := zenity.Error("Callee declined the call"); err != nil {
