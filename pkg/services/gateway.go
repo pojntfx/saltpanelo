@@ -20,6 +20,7 @@ var (
 type GatewayRemote struct {
 	RegisterAdapter func(ctx context.Context) error
 	RequestCall     func(ctx context.Context, dstID string) (RequestCallResult, error)
+	HangupCall      func(ctx context.Context, routeID string) error
 }
 
 type RequestCallResult struct {
@@ -293,4 +294,62 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallRes
 		Accept:  true,
 		RouteID: routeID,
 	}, nil
+}
+
+func (g *Gateway) HangupCall(ctx context.Context, routeID string) error {
+	remoteID := rpc.GetRemoteID(ctx)
+
+	if g.verbose {
+		log.Println("Unprovisioning route with route ID", routeID)
+	}
+
+	g.Router.routesLock.Lock()
+
+	routerPeers := g.Router.Peers()
+	gatewayPeers := g.Peers()
+
+	switchesToClose := map[string][]SwitchRemote{}
+	adaptersToClose := map[string][]AdapterRemote{}
+
+	route, ok := g.Router.routes[routeID]
+	if !ok {
+		g.Router.routesLock.Unlock()
+
+		return ErrRouteNotFound
+	}
+
+	for _, candidateID := range route {
+		if remoteID == candidateID {
+			// Don't call `close` on the peer with `remoteID` as its already disconnected at this point
+			continue
+		}
+
+		if sw, ok := routerPeers[candidateID]; ok {
+			if _, ok := switchesToClose[routeID]; !ok {
+				switchesToClose[routeID] = []SwitchRemote{}
+			}
+
+			switchesToClose[routeID] = append(switchesToClose[routeID], sw)
+		}
+
+		if ad, ok := gatewayPeers[candidateID]; ok {
+			if _, ok := adaptersToClose[routeID]; !ok {
+				adaptersToClose[routeID] = []AdapterRemote{}
+			}
+
+			adaptersToClose[routeID] = append(adaptersToClose[routeID], ad)
+		}
+	}
+
+	delete(g.Router.routes, routeID)
+
+	g.Router.routesLock.Unlock()
+
+	unprovisionSwitchesAndAdapters(switchesToClose, adaptersToClose, remoteID)
+
+	if err := g.Router.updateGraphs(context.Background()); err != nil {
+		return err
+	}
+
+	return nil
 }

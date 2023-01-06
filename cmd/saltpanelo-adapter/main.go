@@ -43,6 +43,15 @@ func main() {
 
 			return true, nil
 		},
+		func(ctx context.Context, routeID string) error {
+			go func() {
+				if err := zenity.Info(fmt.Sprintf("Call with route ID %v ended", routeID)); err != nil {
+					log.Println("Could not display call disconnection message, continuing:", err)
+				}
+			}()
+
+			return nil
+		},
 	)
 	clients := 0
 	registry := rpc.NewRegistry(
@@ -127,6 +136,34 @@ func main() {
 
 						return
 					}
+
+					go func(peer services.GatewayRemote) {
+						if err := zenity.Question(
+							fmt.Sprintf("Call with route ID %v", requestCallResult.RouteID),
+							zenity.Title("Ongoing Call"),
+							zenity.QuestionIcon,
+							zenity.OKLabel("Hang Up"),
+							zenity.NoCancel(),
+						); err != nil {
+							if errors.Is(err, zenity.ErrCanceled) {
+								return
+							}
+
+							errs <- err
+
+							return
+						}
+
+						if *verbose {
+							log.Println("Hanging up call with route ID", requestCallResult.RouteID)
+						}
+
+						if err := peer.HangupCall(ctx, requestCallResult.RouteID); err != nil {
+							errs <- err
+
+							return
+						}
+					}(peer)
 				} else {
 					if err := zenity.Error("Callee declined the call"); err != nil {
 						errs <- err

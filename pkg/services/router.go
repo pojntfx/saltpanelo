@@ -370,6 +370,16 @@ func unprovisionRouteForPeer(r *Router, g *Gateway, remoteID string) error {
 
 	r.routesLock.Unlock()
 
+	unprovisionSwitchesAndAdapters(switchesToClose, adaptersToClose, remoteID)
+
+	if err := r.updateGraphs(context.Background()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func unprovisionSwitchesAndAdapters(switchesToClose map[string][]SwitchRemote, adaptersToClose map[string][]AdapterRemote, remoteID string) {
 	var wg sync.WaitGroup
 
 	for routeID, peers := range switchesToClose {
@@ -401,12 +411,6 @@ func unprovisionRouteForPeer(r *Router, g *Gateway, remoteID string) error {
 	}
 
 	wg.Wait()
-
-	if err := r.updateGraphs(context.Background()); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
