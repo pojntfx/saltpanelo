@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ var (
 	ErrDstNotFound              = errors.New("could not find destination")
 	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
 	ErrRouteNotFound            = errors.New("could not find route")
+	ErrSwitchNotFound           = errors.New("could not find switch")
 	ErrInvalidUnprovisioner     = errors.New("could not unprovision invalid unprovisioner")
 )
 
@@ -312,8 +314,61 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 	routeID := uuid.NewString()
 
-	// TODO: Call `ProvisionRoute` in adapters & switches for route with `routeID`
-	// (On switches) It should dial `srcAddr` and create `net.Listener` that is being copied to/from `srcAddr`, then return that port
+	routerPeers := r.Peers()
+	switches := r.getSwitches()
+
+	switchesToProvision := []SwitchRemote{}
+	switchMetadata := []SwitchMetadata{}
+	for _, swID := range path[1 : len(path)-2] {
+		sw, ok := routerPeers[swID]
+		if !ok {
+			return "", ErrSwitchNotFound
+		}
+
+		md, ok := switches[swID]
+		if !ok {
+			return "", ErrSwitchNotFound
+		}
+
+		switchesToProvision = append([]SwitchRemote{sw}, switchesToProvision...)
+		switchMetadata = append([]SwitchMetadata{md}, switchMetadata...)
+	}
+
+	lastRaddr := ""
+	for i, sw := range switchesToProvision {
+		lport, err := sw.ProvisionRoute(context.Background(), routeID, lastRaddr)
+		if err != nil {
+			return "", err
+		}
+
+		newRaddr, err := net.ResolveTCPAddr("tcp", switchMetadata[i].Addr)
+		if err != nil {
+			return "", err
+		}
+		newRaddr.Port = lport
+
+		lastRaddr = newRaddr.String()
+	}
+
+	adapters := r.Gateway.Peers()
+
+	dst, ok := adapters[path[0]]
+	if !ok {
+		return "", ErrAdapterNotFound
+	}
+
+	src, ok := adapters[path[len(path)-1]]
+	if !ok {
+		return "", ErrAdapterNotFound
+	}
+
+	if err := dst.ProvisionRoute(context.Background(), routeID, switchMetadata[0].Addr); err != nil {
+		return "", err
+	}
+
+	if err := src.ProvisionRoute(context.Background(), routeID, switchMetadata[0].Addr); err != nil {
+		return "", err
+	}
 
 	r.routesLock.Lock()
 	r.routes[routeID] = path

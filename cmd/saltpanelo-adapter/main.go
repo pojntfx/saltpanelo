@@ -24,7 +24,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewAdapter(
+	errs := make(chan error)
+
+	var l *services.Adapter
+	l = services.NewAdapter(
 		*verbose,
 		func(ctx context.Context, srcID string) (bool, error) {
 			if err := zenity.Question(
@@ -52,6 +55,39 @@ func main() {
 
 			return nil
 		},
+		func(ctx context.Context, routeID, raddr string) error {
+			for _, peer := range l.Peers() {
+				go func(peer services.GatewayRemote) {
+					if err := zenity.Question(
+						fmt.Sprintf("Call with route ID %v listening on address %v", routeID, raddr),
+						zenity.Title("Ongoing Call"),
+						zenity.QuestionIcon,
+						zenity.OKLabel("Hang Up"),
+						zenity.NoCancel(),
+					); err != nil {
+						if errors.Is(err, zenity.ErrCanceled) {
+							return
+						}
+
+						errs <- err
+
+						return
+					}
+
+					if *verbose {
+						log.Println("Hanging up call with route ID", routeID)
+					}
+
+					if err := peer.HangupCall(ctx, routeID); err != nil {
+						errs <- err
+
+						return
+					}
+				}(peer)
+			}
+
+			return nil
+		},
 	)
 	clients := 0
 	registry := rpc.NewRegistry(
@@ -74,7 +110,9 @@ func main() {
 							}
 
 							if err := peer.RegisterAdapter(ctx); err != nil {
-								log.Fatal("Could not register with gateway with ID", remoteID, ", stopping:", err)
+								errs <- err
+
+								return
 							}
 
 							if *verbose {
@@ -92,8 +130,6 @@ func main() {
 		},
 	)
 	l.Peers = registry.Peers
-
-	errs := make(chan error)
 
 	go func() {
 		conn, err := net.Dial("tcp", *raddr)
@@ -136,34 +172,6 @@ func main() {
 
 						return
 					}
-
-					go func(peer services.GatewayRemote) {
-						if err := zenity.Question(
-							fmt.Sprintf("Call with route ID %v", requestCallResult.RouteID),
-							zenity.Title("Ongoing Call"),
-							zenity.QuestionIcon,
-							zenity.OKLabel("Hang Up"),
-							zenity.NoCancel(),
-						); err != nil {
-							if errors.Is(err, zenity.ErrCanceled) {
-								return
-							}
-
-							errs <- err
-
-							return
-						}
-
-						if *verbose {
-							log.Println("Hanging up call with route ID", requestCallResult.RouteID)
-						}
-
-						if err := peer.HangupCall(ctx, requestCallResult.RouteID); err != nil {
-							errs <- err
-
-							return
-						}
-					}(peer)
 				} else {
 					if err := zenity.Error("Callee declined the call"); err != nil {
 						errs <- err
