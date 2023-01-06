@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type AdapterRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
+	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) error
 }
 
 func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
@@ -27,6 +29,7 @@ type Adapter struct {
 
 	onRequestCall      func(ctx context.Context, srcID string) (bool, error)
 	onCallDisconnected func(ctx context.Context, routeID string) error
+	onHandleCall       func(ctx context.Context, routeID, raddr string) error
 
 	Peers func() map[string]GatewayRemote
 }
@@ -36,12 +39,14 @@ func NewAdapter(
 
 	onRequestCall func(ctx context.Context, srcID string) (bool, error),
 	onCallDisconnected func(ctx context.Context, routeID string) error,
+	onHandleCall func(ctx context.Context, routeID, raddr string) error,
 ) *Adapter {
 	return &Adapter{
 		verbose: verbose,
 
 		onRequestCall:      onRequestCall,
 		onCallDisconnected: onCallDisconnected,
+		onHandleCall:       onHandleCall,
 	}
 }
 
@@ -100,4 +105,20 @@ func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
 	// TODO: Close locally provisioned connection
 
 	return a.onCallDisconnected(ctx, routeID)
+}
+
+func (a *Adapter) ProvisionRoute(ctx context.Context, routeID string, raddr string) error {
+	if a.verbose {
+		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
+	}
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return err
+	}
+	defer lis.Close()
+
+	// TODO: Dial `raddr` and create two-way `io.Copy` goroutines
+
+	return a.onHandleCall(ctx, routeID, lis.Addr().String())
 }
