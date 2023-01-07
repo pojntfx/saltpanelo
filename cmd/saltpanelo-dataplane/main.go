@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
@@ -14,23 +15,28 @@ import (
 
 func main() {
 	raddr := flag.String("raddr", "localhost:1337", "Router remote address")
-	laddr := flag.String("laddr", ":1340", "Listen address")
-	aaddr := flag.String("aaddr", ":1340", "Listen address to advertise; leave hostname empty to resolve public IP using STUN")
+	laddr := flag.String("laddr", ":1340", "Listen address for latency and throughput tests")
+	taddr := flag.String("taddr", "127.0.0.1:1340", "Listen address to advertise for latency and throughput tests")
+	ahost := flag.String("ahost", "127.0.0.1", "Host to advertise other switches to dial; leave empty to resolve public IP using STUN")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	stunAddr := flag.String("stun", "stun.l.google.com:19302", "STUN server address")
 
 	flag.Parse()
 
-	advertisedAddr, err := net.ResolveTCPAddr("tcp", *aaddr)
-	if err != nil {
-		panic(err)
+	if strings.TrimSpace(*ahost) == "" {
+		ah, err := utils.GetPublicIP(*stunAddr)
+		if err != nil {
+			panic(err)
+		}
+
+		*ahost = ah.String()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	l := services.NewSwitch(*verbose)
+	l := services.NewSwitch(*verbose, *ahost)
 	clients := 0
 	registry := rpc.NewRegistry(
 		l,
@@ -51,15 +57,7 @@ func main() {
 								log.Println("Registering with router with ID", remoteID)
 							}
 
-							if advertisedAddr.IP == nil {
-								advertisedAddr.IP, err = utils.GetPublicIP(*stunAddr)
-
-								if err != nil {
-									log.Fatal("Could not get public IP using STUN, stopping:", err)
-								}
-							}
-
-							if err := peer.RegisterSwitch(ctx, advertisedAddr.String()); err != nil {
+							if err := peer.RegisterSwitch(ctx, *taddr); err != nil {
 								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
 							}
 
