@@ -15,7 +15,7 @@ type SwitchRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
-	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) (int, error)
+	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) ([]int, error)
 }
 
 type ThroughputResult struct {
@@ -89,7 +89,7 @@ func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
 	return nil
 }
 
-func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr string) (int, error) {
+func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr string) ([]int, error) {
 	if s.verbose {
 		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
 	}
@@ -100,18 +100,21 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	cp := connPair{}
 
 	ready := make(chan struct{})
+	errs := make(chan error)
+	ports := []int{}
 
 	if strings.TrimSpace(raddr) == "" {
 		laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 		if err != nil {
-			return -1, err
+			return []int{}, err
 		}
 
 		lis, err := net.ListenTCP("tcp", laddr)
 		if err != nil {
-			return -1, err
+			return []int{}, err
 		}
 		cp.src = lis
+		ports = append(ports, laddr.Port)
 
 		go func() {
 			conn, err := lis.Accept()
@@ -120,7 +123,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 					log.Println("Could not accept src connection, stopping:", err)
 				}
 
-				close(ready)
+				errs <- err
 
 				return
 			}
@@ -132,7 +135,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	} else {
 		conn, err := net.Dial("tcp", raddr)
 		if err != nil {
-			return -1, err
+			return []int{}, err
 		}
 
 		cp.src = conn
@@ -145,14 +148,15 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 
 	laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 	if err != nil {
-		return -1, err
+		return []int{}, err
 	}
 
 	lis, err := net.ListenTCP("tcp", laddr)
 	if err != nil {
-		return -1, err
+		return []int{}, err
 	}
 	cp.dst = lis
+	ports = append(ports, laddr.Port)
 
 	go func() {
 		conn, err := lis.Accept()
@@ -161,7 +165,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 				log.Println("Could not accept dst connection, stopping:", err)
 			}
 
-			close(ready)
+			errs <- err
 
 			return
 		}
@@ -173,33 +177,51 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 
 	go func() {
 		i := 0
-		for range ready {
-			i++
+	l:
+		for {
+			select {
+			case <-ready:
+				i++
 
-			if i == 2 {
-				break
+				if i == 2 {
+					break l
+				}
+			case err = <-errs:
+				break l
 			}
 		}
 
 		if i < 2 {
 			if s.verbose {
-				log.Println("Could not accept src or dst connection, stopping")
+				log.Println("Could not accept src or dst connection, stopping:", err)
 			}
 		}
 
 		go func() {
-			if _, err := io.Copy(src, dst); err != nil {
+			defer func() {
+				err := recover()
+
 				if s.verbose {
 					log.Println("Could not copy from dst to src, stopping:", err)
 				}
+			}()
+
+			if _, err := io.Copy(src, dst); err != nil {
+				panic(err)
 			}
 		}()
 
 		go func() {
-			if _, err := io.Copy(dst, src); err != nil {
+			defer func() {
+				err := recover()
+
 				if s.verbose {
 					log.Println("Could not copy from src to dst, stopping:", err)
 				}
+			}()
+
+			if _, err := io.Copy(dst, src); err != nil {
+				panic(err)
 			}
 		}()
 	}()
@@ -208,7 +230,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	s.routes[routeID] = cp
 	s.routesLock.Unlock()
 
-	return laddr.Port, nil
+	return ports, nil
 }
 
 func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error) {

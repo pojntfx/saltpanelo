@@ -21,7 +21,7 @@ var (
 	ErrDstIsSrc                 = errors.New("could not find route when dst and src are the same")
 	ErrRouteNotFound            = errors.New("could not find route")
 	ErrSwitchNotFound           = errors.New("could not find switch")
-	ErrInvalidUnprovisioner     = errors.New("could not unprovision invalid unprovisioner")
+	ErrInvalidPortsCount        = errors.New("could not proceed with invalid ports count")
 )
 
 type RouterRemote struct {
@@ -334,9 +334,10 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		switchMetadata = append([]SwitchMetadata{md}, switchMetadata...)
 	}
 
-	lastRaddr := ""
+	egressLaddr := ""
+	ingressRaddr := ""
 	for i, sw := range switchesToProvision {
-		lport, err := sw.ProvisionRoute(context.Background(), routeID, lastRaddr)
+		lports, err := sw.ProvisionRoute(context.Background(), routeID, ingressRaddr)
 		if err != nil {
 			return "", err
 		}
@@ -345,9 +346,26 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		newRaddr.Port = lport
 
-		lastRaddr = newRaddr.String()
+		if i == 0 {
+			if len(lports) != 2 {
+				return "", ErrInvalidPortsCount
+			}
+
+			newRaddr.Port = lports[0]
+
+			egressLaddr = newRaddr.String()
+
+			lports = []int{lports[1]}
+		} else {
+			if len(lports) != 1 {
+				return "", ErrInvalidPortsCount
+			}
+		}
+
+		newRaddr.Port = lports[0]
+
+		ingressRaddr = newRaddr.String()
 	}
 
 	adapters := r.Gateway.Peers()
@@ -362,11 +380,11 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		return "", ErrAdapterNotFound
 	}
 
-	if err := dst.ProvisionRoute(context.Background(), routeID, switchMetadata[0].Addr); err != nil {
+	if err := dst.ProvisionRoute(context.Background(), routeID, egressLaddr); err != nil {
 		return "", err
 	}
 
-	if err := src.ProvisionRoute(context.Background(), routeID, switchMetadata[len(switchMetadata)-1].Addr); err != nil {
+	if err := src.ProvisionRoute(context.Background(), routeID, ingressRaddr); err != nil {
 		return "", err
 	}
 
