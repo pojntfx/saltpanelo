@@ -16,6 +16,7 @@ import (
 
 func main() {
 	raddr := flag.String("raddr", "localhost:1338", "Gateway remote address")
+	ahost := flag.String("ahost", "127.0.0.1", "Host to bind to when receiving calls")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
@@ -29,6 +30,7 @@ func main() {
 	var l *services.Adapter
 	l = services.NewAdapter(
 		*verbose,
+		*ahost,
 		func(ctx context.Context, srcID string) (bool, error) {
 			if err := zenity.Question(
 				fmt.Sprintf("Incoming call from remote with with ID %v, do you want to answer it?", srcID),
