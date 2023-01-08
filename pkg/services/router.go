@@ -337,7 +337,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	egressLaddr := ""
 	ingressRaddr := ""
 	for i, sw := range switchesToProvision {
-		lports, err := sw.ProvisionRoute(context.Background(), routeID, ingressRaddr)
+		laddrs, err := sw.ProvisionRoute(context.Background(), routeID, ingressRaddr)
 		if err != nil {
 			return "", err
 		}
@@ -348,22 +348,32 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		}
 
 		if i == 0 {
-			if len(lports) != 2 {
+			if len(laddrs) != 2 {
 				return "", ErrInvalidPortsCount
 			}
 
-			newRaddr.Port = lports[0]
+			newLaddr, err := net.ResolveTCPAddr("tcp", laddrs[0])
+			if err != nil {
+				return "", err
+			}
+
+			newRaddr.Port = newLaddr.Port
 
 			egressLaddr = newRaddr.String()
 
-			lports = []int{lports[1]}
+			laddrs = []string{laddrs[1]}
 		} else {
-			if len(lports) != 1 {
+			if len(laddrs) != 1 {
 				return "", ErrInvalidPortsCount
 			}
 		}
 
-		newRaddr.Port = lports[0]
+		newLaddr, err := net.ResolveTCPAddr("tcp", laddrs[0])
+		if err != nil {
+			return "", err
+		}
+
+		newRaddr.Port = newLaddr.Port
 
 		ingressRaddr = newRaddr.String()
 	}
