@@ -15,7 +15,7 @@ type SwitchRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
-	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) ([]int, error)
+	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) ([]string, error)
 }
 
 type ThroughputResult struct {
@@ -89,7 +89,7 @@ func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
 	return nil
 }
 
-func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr string) ([]int, error) {
+func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr string) ([]string, error) {
 	if s.verbose {
 		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
 	}
@@ -101,20 +101,20 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 
 	ready := make(chan struct{})
 	errs := make(chan error)
-	ports := []int{}
+	addrs := []string{}
 
 	if strings.TrimSpace(raddr) == "" {
 		laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 		if err != nil {
-			return []int{}, err
+			return []string{}, err
 		}
 
 		lis, err := net.ListenTCP("tcp", laddr)
 		if err != nil {
-			return []int{}, err
+			return []string{}, err
 		}
 		cp.src = lis
-		ports = append(ports, laddr.Port)
+		addrs = append(addrs, lis.Addr().String())
 
 		go func() {
 			conn, err := lis.Accept()
@@ -135,7 +135,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	} else {
 		conn, err := net.Dial("tcp", raddr)
 		if err != nil {
-			return []int{}, err
+			return []string{}, err
 		}
 
 		cp.src = conn
@@ -148,15 +148,15 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 
 	laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 	if err != nil {
-		return []int{}, err
+		return []string{}, err
 	}
 
 	lis, err := net.ListenTCP("tcp", laddr)
 	if err != nil {
-		return []int{}, err
+		return []string{}, err
 	}
 	cp.dst = lis
-	ports = append(ports, laddr.Port)
+	addrs = append(addrs, lis.Addr().String())
 
 	go func() {
 		conn, err := lis.Accept()
@@ -230,7 +230,7 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	s.routes[routeID] = cp
 	s.routesLock.Unlock()
 
-	return ports, nil
+	return addrs, nil
 }
 
 func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error) {
