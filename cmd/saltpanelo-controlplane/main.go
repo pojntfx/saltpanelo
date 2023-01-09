@@ -22,11 +22,21 @@ func main() {
 	testTimeout := flag.Duration("test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
 	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
+	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
 
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if *verbose {
+		log.Println("Generating certificate authority")
+	}
+
+	_, _, _, err := utils.GenerateCertificateAuthority(*caValidity)
+	if err != nil {
+		panic(err)
+	}
 
 	metrics := services.NewMetrics(*verbose)
 	router := services.NewRouter(
