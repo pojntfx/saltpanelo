@@ -319,11 +319,6 @@ func (g *Gateway) HangupCall(ctx context.Context, routeID string) error {
 	}
 
 	for _, candidateID := range route {
-		if remoteID == candidateID {
-			// Don't call `close` on the peer with `remoteID` as its already disconnected at this point
-			continue
-		}
-
 		if sw, ok := routerPeers[candidateID]; ok {
 			if _, ok := switchesToClose[routeID]; !ok {
 				switchesToClose[routeID] = []SwitchRemote{}
