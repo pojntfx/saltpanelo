@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"github.com/pojntfx/go-auth-utils/pkg/authn"
+	"github.com/pojntfx/go-auth-utils/pkg/authn/oidc"
 )
 
 var (
@@ -18,9 +20,9 @@ var (
 )
 
 type GatewayRemote struct {
-	RegisterAdapter func(ctx context.Context) error
-	RequestCall     func(ctx context.Context, dstID string) (RequestCallResult, error)
-	HangupCall      func(ctx context.Context, routeID string) error
+	RegisterAdapter func(ctx context.Context, token string) error
+	RequestCall     func(ctx context.Context, token string, dstID string) (RequestCallResult, error)
+	HangupCall      func(ctx context.Context, token string, routeID string) error
 }
 
 type RequestCallResult struct {
@@ -49,6 +51,8 @@ type Gateway struct {
 	adaptersLock sync.Mutex
 	adapters     map[string]AdapterMetadata
 
+	auth authn.Authn
+
 	Router *Router
 
 	Peers func() map[string]AdapterRemote
@@ -56,12 +60,21 @@ type Gateway struct {
 
 func NewGateway(
 	verbose bool,
+
+	oidcIssuer,
+	oidcClientID string,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
 
 		adapters: map[string]AdapterMetadata{},
+
+		auth: oidc.NewAuthn(oidcIssuer, oidcClientID),
 	}
+}
+
+func (g *Gateway) Open(ctx context.Context) error {
+	return g.auth.Open(ctx)
 }
 
 func (g *Gateway) onClientDisconnect(remoteID string) error {
@@ -155,7 +168,11 @@ func (g *Gateway) refreshPeerLatency(
 	return nil
 }
 
-func (g *Gateway) RegisterAdapter(ctx context.Context) error {
+func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
+	if err := g.auth.Validate("", token); err != nil {
+		return err
+	}
+
 	remoteID := rpc.GetRemoteID(ctx)
 
 	g.adaptersLock.Lock()
@@ -180,7 +197,11 @@ func (g *Gateway) RegisterAdapter(ctx context.Context) error {
 	return g.Router.updateGraphs(context.Background())
 }
 
-func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallResult, error) {
+func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (RequestCallResult, error) {
+	if err := g.auth.Validate("", token); err != nil {
+		return RequestCallResult{}, err
+	}
+
 	remoteID := rpc.GetRemoteID(ctx)
 
 	g.adaptersLock.Lock()
@@ -296,7 +317,11 @@ func (g *Gateway) RequestCall(ctx context.Context, dstID string) (RequestCallRes
 	}, nil
 }
 
-func (g *Gateway) HangupCall(ctx context.Context, routeID string) error {
+func (g *Gateway) HangupCall(ctx context.Context, token string, routeID string) error {
+	if err := g.auth.Validate("", token); err != nil {
+		return err
+	}
+
 	remoteID := rpc.GetRemoteID(ctx)
 
 	if g.verbose {

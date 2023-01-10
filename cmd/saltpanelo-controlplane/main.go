@@ -5,9 +5,11 @@ import (
 	"flag"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/services"
 	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
@@ -23,8 +25,18 @@ func main() {
 	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
+	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
+	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
 
 	flag.Parse()
+
+	if strings.TrimSpace(*oidcIssuer) == "" {
+		panic(auth.ErrEmptyOIDCIssuer)
+	}
+
+	if strings.TrimSpace(*oidcClientID) == "" {
+		panic(auth.ErrEmptyOIDCClientID)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -50,7 +62,13 @@ func main() {
 	)
 	gateway := services.NewGateway(
 		*verbose,
+		*oidcIssuer,
+		*oidcClientID,
 	)
+
+	if err := gateway.Open(ctx); err != nil {
+		panic(err)
+	}
 
 	metricsClients := 0
 	metricsRegistry := rpc.NewRegistry(
