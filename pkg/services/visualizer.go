@@ -17,6 +17,9 @@ import (
 )
 
 type VisualizerRemote struct {
+	Attest func(
+		ctx context.Context,
+	) (string, error)
 	RenderNetworkVisualization func(
 		ctx context.Context,
 		switches map[string]SwitchMetadata,
@@ -148,6 +151,8 @@ type Visualizer struct {
 
 	command string
 
+	getIDToken func() (string, error)
+
 	Peers func() map[string]MetricsRemote
 }
 
@@ -156,12 +161,16 @@ func NewVisualizer(
 	networkFile *os.File,
 	routesFile *os.File,
 	command string,
+
+	getIDToken func() (string, error),
 ) *Visualizer {
 	return &Visualizer{
 		verbose:     verbose,
 		networkFile: networkFile,
 		routesFile:  routesFile,
 		command:     command,
+
+		getIDToken: getIDToken,
 	}
 }
 
@@ -240,4 +249,16 @@ func (v *Visualizer) RenderRoutesVisualization(
 	}
 
 	return utils.PipeShellCommand(v.command, buf, v.routesFile)
+}
+
+func (v *Visualizer) Attest(
+	ctx context.Context,
+) (string, error) {
+	remoteID := rpc.GetRemoteID(ctx)
+
+	if v.verbose {
+		log.Println("Doing remote attestation for metrics service with ID", remoteID)
+	}
+
+	return v.getIDToken()
 }

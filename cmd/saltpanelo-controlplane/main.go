@@ -27,6 +27,7 @@ func main() {
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
 	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
 	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
+	metricsAuthorizedEmail := flag.String("metrics-authorized-email", "", "Authorized email for metrics (e.g. jean.doe@example.com)")
 
 	flag.Parse()
 
@@ -36,6 +37,10 @@ func main() {
 
 	if strings.TrimSpace(*oidcClientID) == "" {
 		panic(auth.ErrEmptyOIDCClientID)
+	}
+
+	if strings.TrimSpace(*metricsAuthorizedEmail) == "" {
+		panic(auth.ErrEmptyMetricsAuthorizedEmail)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -50,7 +55,12 @@ func main() {
 		panic(err)
 	}
 
-	metrics := services.NewMetrics(*verbose)
+	metrics := services.NewMetrics(
+		*verbose,
+		*oidcIssuer,
+		*oidcClientID,
+		*metricsAuthorizedEmail,
+	)
 	router := services.NewRouter(
 		*verbose,
 
@@ -67,6 +77,10 @@ func main() {
 	)
 
 	if err := gateway.Open(ctx); err != nil {
+		panic(err)
+	}
+
+	if err := metrics.Open(ctx); err != nil {
 		panic(err)
 	}
 

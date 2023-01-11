@@ -8,8 +8,7 @@ import (
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
-	"github.com/pojntfx/go-auth-utils/pkg/authn"
-	"github.com/pojntfx/go-auth-utils/pkg/authn/oidc"
+	"github.com/pojntfx/saltpanelo/pkg/auth"
 )
 
 var (
@@ -51,7 +50,7 @@ type Gateway struct {
 	adaptersLock sync.Mutex
 	adapters     map[string]AdapterMetadata
 
-	auth authn.Authn
+	auth *auth.Authn
 
 	Router *Router
 
@@ -69,7 +68,7 @@ func NewGateway(
 
 		adapters: map[string]AdapterMetadata{},
 
-		auth: oidc.NewAuthn(oidcIssuer, oidcClientID),
+		auth: auth.NewAuthn(oidcIssuer, oidcClientID),
 	}
 }
 
@@ -169,7 +168,7 @@ func (g *Gateway) refreshPeerLatency(
 }
 
 func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
-	if err := g.auth.Validate("", token); err != nil {
+	if _, err := g.auth.Validate(token); err != nil {
 		return err
 	}
 
@@ -198,7 +197,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
 }
 
 func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (RequestCallResult, error) {
-	if err := g.auth.Validate("", token); err != nil {
+	if _, err := g.auth.Validate(token); err != nil {
 		return RequestCallResult{}, err
 	}
 
@@ -318,7 +317,7 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (
 }
 
 func (g *Gateway) HangupCall(ctx context.Context, token string, routeID string) error {
-	if err := g.auth.Validate("", token); err != nil {
+	if _, err := g.auth.Validate(token); err != nil {
 		return err
 	}
 

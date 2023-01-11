@@ -17,6 +17,8 @@ var (
 	ErrEmptyOIDCRedirectURL = errors.New("could not continue with empty OIDC redirect URL")
 
 	ErrNotLoggedIn = errors.New("could not continue without being logged in")
+
+	ErrEmptyMetricsAuthorizedEmail = errors.New("could not continue with empty metrics authorization email")
 )
 
 // Extended from https://github.com/pojntfx/goit/blob/main/pkg/token/token.go
@@ -62,7 +64,7 @@ func (t *TokenManager) InitialLogin() error {
 		ClientID:    t.oidcClientID,
 		RedirectURL: t.oidcRedirectURL,
 		Endpoint:    provider.Endpoint(),
-		Scopes:      []string{oidc.ScopeOpenID},
+		Scopes:      []string{oidc.ScopeOpenID, "email"},
 	}
 
 	u, err := url.Parse(t.oidcRedirectURL)
@@ -77,7 +79,7 @@ func (t *TokenManager) InitialLogin() error {
 	srv.Handler = http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/html")
 
-		if _, err := fmt.Fprint(rw, `<!DOCTYPE html><script>window.open("", "_parent", "");window.close()</script>`); err != nil {
+		if _, err := fmt.Fprint(rw, `<!DOCTYPE html><script>window.open("", "_parent", "");window.close()</script><h1>You can now close this window.</h1>`); err != nil {
 			errs <- err
 
 			return
