@@ -10,7 +10,6 @@ require (
 	github.com/ncruces/zenity v0.10.5
 	github.com/pion/stun v0.3.5
 	github.com/pojntfx/dudirekta v0.4.0
-	github.com/pojntfx/go-auth-utils v0.1.0
 	golang.org/x/exp v0.0.0-20221230185412-738e83a70c30
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 )

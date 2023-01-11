@@ -49,7 +49,6 @@ func NewAdapter(
 	onCallDisconnected func(ctx context.Context, routeID string) error,
 	onHandleCall func(ctx context.Context, routeID, raddr string) error,
 	getIDToken func() (string, error),
-
 ) *Adapter {
 	return &Adapter{
 		verbose: verbose,
