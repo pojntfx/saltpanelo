@@ -33,6 +33,7 @@ type Adapter struct {
 	onRequestCall      func(ctx context.Context, srcID string) (bool, error)
 	onCallDisconnected func(ctx context.Context, routeID string) error
 	onHandleCall       func(ctx context.Context, routeID, raddr string) error
+	getIDToken         func() (string, error)
 
 	routes     map[string]connPair
 	routesLock sync.Mutex
@@ -47,6 +48,8 @@ func NewAdapter(
 	onRequestCall func(ctx context.Context, srcID string) (bool, error),
 	onCallDisconnected func(ctx context.Context, routeID string) error,
 	onHandleCall func(ctx context.Context, routeID, raddr string) error,
+	getIDToken func() (string, error),
+
 ) *Adapter {
 	return &Adapter{
 		verbose: verbose,
@@ -55,6 +58,7 @@ func NewAdapter(
 		onRequestCall:      onRequestCall,
 		onCallDisconnected: onCallDisconnected,
 		onHandleCall:       onHandleCall,
+		getIDToken:         getIDToken,
 
 		routes: map[string]connPair{},
 	}
@@ -79,8 +83,13 @@ func (a *Adapter) requestCall(
 		log.Println("Requesting a call with ID", dstID)
 	}
 
+	token, err := a.getIDToken()
+	if err != nil {
+		return false, "", err
+	}
+
 	for _, peer := range a.Peers() {
-		requestCallResult, err := peer.RequestCall(ctx, dstID)
+		requestCallResult, err := peer.RequestCall(ctx, token, dstID)
 		if err != nil {
 			return false, "", err
 		}

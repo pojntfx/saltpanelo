@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cli/browser"
 	"github.com/ncruces/zenity"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
@@ -22,33 +23,47 @@ func main() {
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
-	// TODO: Integrate OpenAPI token cycle (refresh tokens etc.)
-	oidcAPIToken := flag.String("oidc-api-token", "", "OIDC API token")
-
-	// oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
-	// oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
-	// oidcRedirectURL := flag.String("oidc-redirect-url", "http://localhost:11337", "OIDC redirect URL")
+	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
+	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
+	oidcRedirectURL := flag.String("oidc-redirect-url", "http://localhost:11337", "OIDC redirect URL")
 
 	flag.Parse()
 
-	// if strings.TrimSpace(*oidcIssuer) == "" {
-	// 	panic(auth.ErrEmptyOIDCIssuer)
-	// }
-
-	// if strings.TrimSpace(*oidcClientID) == "" {
-	// 	panic(auth.ErrEmptyOIDCClientID)
-	// }
-
-	// if strings.TrimSpace(*oidcRedirectURL) == "" {
-	// 	panic(auth.ErrEmptyOIDCRedirectURL)
-	// }
-
-	if strings.TrimSpace(*oidcAPIToken) == "" {
+	if strings.TrimSpace(*oidcIssuer) == "" {
 		panic(auth.ErrEmptyOIDCIssuer)
+	}
+
+	if strings.TrimSpace(*oidcClientID) == "" {
+		panic(auth.ErrEmptyOIDCClientID)
+	}
+
+	if strings.TrimSpace(*oidcRedirectURL) == "" {
+		panic(auth.ErrEmptyOIDCRedirectURL)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	tm := auth.NewTokenManager(
+		*oidcIssuer,
+		*oidcClientID,
+		*oidcRedirectURL,
+
+		func(s string) error {
+			if err := browser.OpenURL(s); err != nil {
+				log.Printf(`Could not open browser, please open the following URL in your browser manually to authorize:
+%v`, s)
+			}
+
+			return nil
+		},
+
+		ctx,
+	)
+
+	if err := tm.InitialLogin(); err != nil {
+		panic(err)
+	}
 
 	errs := make(chan error)
 
@@ -105,7 +120,14 @@ func main() {
 						log.Println("Hanging up call with route ID", routeID)
 					}
 
-					if err := peer.HangupCall(ctx, *oidcAPIToken, routeID); err != nil {
+					token, err := tm.GetIDToken()
+					if err != nil {
+						errs <- err
+
+						return
+					}
+
+					if err := peer.HangupCall(ctx, token, routeID); err != nil {
 						errs <- err
 
 						return
@@ -115,6 +137,7 @@ func main() {
 
 			return nil
 		},
+		tm.GetIDToken,
 	)
 	clients := 0
 	registry := rpc.NewRegistry(
@@ -136,7 +159,14 @@ func main() {
 								log.Println("Registering with gateway with ID", remoteID)
 							}
 
-							if err := peer.RegisterAdapter(ctx, *oidcAPIToken); err != nil {
+							token, err := tm.GetIDToken()
+							if err != nil {
+								errs <- err
+
+								return
+							}
+
+							if err := peer.RegisterAdapter(ctx, token); err != nil {
 								errs <- err
 
 								return
@@ -186,7 +216,14 @@ func main() {
 			}
 
 			for _, peer := range l.Peers() {
-				requestCallResult, err := peer.RequestCall(ctx, *oidcAPIToken, dstID)
+				token, err := tm.GetIDToken()
+				if err != nil {
+					errs <- err
+
+					return
+				}
+
+				requestCallResult, err := peer.RequestCall(ctx, token, dstID)
 				if err != nil {
 					errs <- err
 
