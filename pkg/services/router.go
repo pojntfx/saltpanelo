@@ -11,6 +11,7 @@ import (
 	"github.com/dominikbraun/graph"
 	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"golang.org/x/exp/slices"
 )
 
@@ -25,7 +26,7 @@ var (
 )
 
 type RouterRemote struct {
-	RegisterSwitch func(ctx context.Context, addr string) error
+	RegisterSwitch func(ctx context.Context, token string, addr string) error
 }
 
 func HandleRouterClientDisconnect(r *Router, g *Gateway, remoteID string) error {
@@ -69,6 +70,8 @@ type Router struct {
 
 	verbose bool
 
+	auth *auth.Authn
+
 	Peers func() map[string]SwitchRemote
 }
 
@@ -80,6 +83,9 @@ func NewRouter(
 
 	throughputLength int64,
 	throughputChunks int64,
+
+	oidcIssuer,
+	oidcClientID string,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
@@ -95,6 +101,8 @@ func NewRouter(
 		routes: map[string][]string{},
 
 		verbose: verbose,
+
+		auth: auth.NewAuthn(oidcIssuer, oidcClientID),
 	}
 }
 
@@ -496,7 +504,11 @@ func unprovisionSwitchesAndAdapters(switchesToClose map[string][]SwitchRemote, a
 	wg.Wait()
 }
 
-func (r *Router) RegisterSwitch(ctx context.Context, addr string) error {
+func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) error {
+	if _, err := r.auth.Validate(token); err != nil {
+		return err
+	}
+
 	remoteID := rpc.GetRemoteID(ctx)
 
 	r.switchesLock.Lock()

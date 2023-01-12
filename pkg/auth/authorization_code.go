@@ -22,7 +22,7 @@ var (
 )
 
 // Extended from https://github.com/pojntfx/goit/blob/main/pkg/token/token.go
-type TokenManager struct {
+type TokenManagerAuthorizationCode struct {
 	oidcIssuer      string
 	oidcClientID    string
 	oidcRedirectURL string
@@ -34,7 +34,7 @@ type TokenManager struct {
 	ctx context.Context
 }
 
-func NewTokenManager(
+func NewTokenManagerAuthorizationCode(
 	oidcIssuer string,
 	oidcClientID string,
 	oidcRedirectURL string,
@@ -42,8 +42,8 @@ func NewTokenManager(
 	openURL func(string) error,
 
 	ctx context.Context,
-) *TokenManager {
-	return &TokenManager{
+) *TokenManagerAuthorizationCode {
+	return &TokenManagerAuthorizationCode{
 		oidcIssuer:      oidcIssuer,
 		oidcClientID:    oidcClientID,
 		oidcRedirectURL: oidcRedirectURL,
@@ -54,7 +54,7 @@ func NewTokenManager(
 	}
 }
 
-func (t *TokenManager) InitialLogin() error {
+func (t *TokenManagerAuthorizationCode) InitialLogin() error {
 	provider, err := oidc.NewProvider(t.ctx, t.oidcIssuer)
 	if err != nil {
 		return err
@@ -128,7 +128,7 @@ func (t *TokenManager) InitialLogin() error {
 	return nil
 }
 
-func (t *TokenManager) GetIDToken() (string, error) {
+func (t *TokenManagerAuthorizationCode) GetIDToken() (string, error) {
 	if t.tokenSource == nil {
 		return "", ErrNotLoggedIn
 	}

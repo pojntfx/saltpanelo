@@ -24,7 +24,7 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 
 	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
-	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
+	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID")
 	oidcRedirectURL := flag.String("oidc-redirect-url", "http://localhost:11337", "OIDC redirect URL")
 
 	flag.Parse()
@@ -44,7 +44,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	tm := auth.NewTokenManager(
+	tm := auth.NewTokenManagerAuthorizationCode(
 		*oidcIssuer,
 		*oidcClientID,
 		*oidcRedirectURL,

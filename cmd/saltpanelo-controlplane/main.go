@@ -25,17 +25,19 @@ func main() {
 	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
-	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
-	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID (e.g. myoidcclientid)")
+	gatewayOIDCIssuer := flag.String("gateway-oidc-issuer", "", "Gateway OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
+	gatewayOIDCClientID := flag.String("gateway-oidc-client-id", "", "Gateway OIDC client ID")
+	routerOIDCIssuer := flag.String("router-oidc-issuer", "", "Router OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
+	routerOIDCClientID := flag.String("router-oidc-client-id", "", "Router OIDC client ID")
 	metricsAuthorizedEmail := flag.String("metrics-authorized-email", "", "Authorized email for metrics (e.g. jean.doe@example.com)")
 
 	flag.Parse()
 
-	if strings.TrimSpace(*oidcIssuer) == "" {
+	if strings.TrimSpace(*gatewayOIDCIssuer) == "" {
 		panic(auth.ErrEmptyOIDCIssuer)
 	}
 
-	if strings.TrimSpace(*oidcClientID) == "" {
+	if strings.TrimSpace(*gatewayOIDCClientID) == "" {
 		panic(auth.ErrEmptyOIDCClientID)
 	}
 
@@ -57,8 +59,8 @@ func main() {
 
 	metrics := services.NewMetrics(
 		*verbose,
-		*oidcIssuer,
-		*oidcClientID,
+		*gatewayOIDCIssuer,
+		*gatewayOIDCClientID,
 		*metricsAuthorizedEmail,
 	)
 	router := services.NewRouter(
@@ -69,11 +71,14 @@ func main() {
 
 		*throughputLength,
 		*throughputChunks,
+
+		*routerOIDCIssuer,
+		*routerOIDCClientID,
 	)
 	gateway := services.NewGateway(
 		*verbose,
-		*oidcIssuer,
-		*oidcClientID,
+		*gatewayOIDCIssuer,
+		*gatewayOIDCClientID,
 	)
 
 	if err := gateway.Open(ctx); err != nil {

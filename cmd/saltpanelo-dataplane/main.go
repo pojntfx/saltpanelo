@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
+	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/services"
 	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
@@ -21,8 +22,23 @@ func main() {
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	stunAddr := flag.String("stun", "stun.l.google.com:19302", "STUN server address")
+	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
+	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID")
+	oidcClientSecret := flag.String("oidc-client-secret", "", "OIDC client secret")
 
 	flag.Parse()
+
+	if strings.TrimSpace(*oidcIssuer) == "" {
+		panic(auth.ErrEmptyOIDCIssuer)
+	}
+
+	if strings.TrimSpace(*oidcClientID) == "" {
+		panic(auth.ErrEmptyOIDCClientID)
+	}
+
+	if strings.TrimSpace(*oidcClientSecret) == "" {
+		panic(auth.ErrEmptyOIDCClientSecret)
+	}
 
 	if strings.TrimSpace(*ahost) == "" {
 		ah, err := utils.GetPublicIP(*stunAddr)
@@ -35,6 +51,20 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	tm := auth.NewTokenManagerClientCredentials(
+		*oidcIssuer,
+		*oidcClientID,
+		*oidcClientSecret,
+
+		ctx,
+	)
+
+	if err := tm.InitialLogin(); err != nil {
+		panic(err)
+	}
+
+	errs := make(chan error)
 
 	l := services.NewSwitch(*verbose, *ahost)
 	clients := 0
@@ -57,7 +87,14 @@ func main() {
 								log.Println("Registering with router with ID", remoteID)
 							}
 
-							if err := peer.RegisterSwitch(ctx, *taddr); err != nil {
+							token, err := tm.GetIDToken()
+							if err != nil {
+								errs <- err
+
+								return
+							}
+
+							if err := peer.RegisterSwitch(ctx, token, *taddr); err != nil {
 								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
 							}
 
@@ -76,8 +113,6 @@ func main() {
 		},
 	)
 	l.Peers = registry.Peers
-
-	errs := make(chan error)
 
 	go func() {
 		conn, err := net.Dial("tcp", *raddr)
