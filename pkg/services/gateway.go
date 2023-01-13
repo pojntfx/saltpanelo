@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"log"
 	"sync"
@@ -19,7 +20,7 @@ var (
 )
 
 type GatewayRemote struct {
-	RegisterAdapter func(ctx context.Context, token string) error
+	RegisterAdapter func(ctx context.Context, token string) ([]byte, error)
 	RequestCall     func(ctx context.Context, token string, dstID string) (RequestCallResult, error)
 	HangupCall      func(ctx context.Context, token string, routeID string) error
 }
@@ -52,6 +53,10 @@ type Gateway struct {
 
 	auth *auth.OIDCAuthn
 
+	caCfg *x509.Certificate
+	caPEM,
+	caPrivKeyPEM []byte
+
 	Router *Router
 
 	Peers func() map[string]AdapterRemote
@@ -62,6 +67,10 @@ func NewGateway(
 
 	oidcIssuer,
 	oidcClientID string,
+
+	caCfg *x509.Certificate,
+	caPEM,
+	caPrivKeyPEM []byte,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
@@ -69,6 +78,10 @@ func NewGateway(
 		adapters: map[string]AdapterMetadata{},
 
 		auth: auth.NewOIDCAuthn(oidcIssuer, oidcClientID),
+
+		caCfg:        caCfg,
+		caPEM:        caPEM,
+		caPrivKeyPEM: caPrivKeyPEM,
 	}
 }
 
@@ -167,9 +180,9 @@ func (g *Gateway) refreshPeerLatency(
 	return nil
 }
 
-func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
+func (g *Gateway) RegisterAdapter(ctx context.Context, token string) ([]byte, error) {
 	if _, err := g.auth.Validate(token); err != nil {
-		return err
+		return []byte{}, err
 	}
 
 	remoteID := rpc.GetRemoteID(ctx)
@@ -179,7 +192,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
 	if _, ok := g.adapters[remoteID]; ok {
 		g.adaptersLock.Unlock()
 
-		return ErrAdapterAlreadyRegistered
+		return []byte{}, ErrAdapterAlreadyRegistered
 	}
 
 	g.adapters[remoteID] = AdapterMetadata{
@@ -193,7 +206,11 @@ func (g *Gateway) RegisterAdapter(ctx context.Context, token string) error {
 
 	g.adaptersLock.Unlock()
 
-	return g.Router.updateGraphs(context.Background())
+	if err := g.Router.updateGraphs(context.Background()); err != nil {
+		return []byte{}, err
+	}
+
+	return g.caPEM, nil
 }
 
 func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (RequestCallResult, error) {

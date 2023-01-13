@@ -53,7 +53,7 @@ func main() {
 		log.Println("Generating certificate authority")
 	}
 
-	_, _, _, err := utils.GenerateCertificateAuthority(*caValidity)
+	caCfg, caPEM, caPrivKeyPEM, err := utils.GenerateCertificateAuthority(*caValidity)
 	if err != nil {
 		panic(err)
 	}
@@ -76,11 +76,20 @@ func main() {
 		*routerOIDCIssuer,
 		*routerOIDCClientID,
 		*routerOIDCAudience,
+
+		caCfg,
+		caPEM,
+		caPrivKeyPEM,
 	)
 	gateway := services.NewGateway(
 		*verbose,
+
 		*gatewayOIDCIssuer,
 		*gatewayOIDCClientID,
+
+		caCfg,
+		caPEM,
+		caPrivKeyPEM,
 	)
 
 	if err := metrics.Open(ctx); err != nil {

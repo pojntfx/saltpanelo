@@ -14,6 +14,10 @@ var (
 	ErrNoPeersFound = errors.New("could not find any peers")
 )
 
+func SetAdapterCA(adapter *Adapter, caPEM []byte) {
+	adapter.caPEM = caPEM
+}
+
 type AdapterRemote struct {
 	RequestCall      func(ctx context.Context, srcID string) (bool, error)
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
@@ -37,6 +41,8 @@ type Adapter struct {
 
 	routes     map[string]connPair
 	routesLock sync.Mutex
+
+	caPEM []byte
 
 	Peers func() map[string]GatewayRemote
 }

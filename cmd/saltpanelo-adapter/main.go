@@ -166,11 +166,14 @@ func main() {
 								return
 							}
 
-							if err := peer.RegisterAdapter(ctx, token); err != nil {
+							caPEM, err := peer.RegisterAdapter(ctx, token)
+							if err != nil {
 								errs <- err
 
 								return
 							}
+
+							services.SetAdapterCA(l, caPEM)
 
 							if *verbose {
 								log.Println("Registered with gateway with ID", remoteID)

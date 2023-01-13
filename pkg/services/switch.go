@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+func SetSwitchCA(sw *Switch, caPEM []byte) {
+	sw.caPEM = caPEM
+}
+
 type SwitchRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
@@ -34,6 +38,8 @@ type Switch struct {
 
 	routes     map[string]connPair
 	routesLock sync.Mutex
+
+	caPEM []byte
 
 	Peers func() map[string]RouterRemote
 }

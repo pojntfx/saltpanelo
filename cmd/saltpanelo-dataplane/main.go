@@ -96,9 +96,12 @@ func main() {
 								return
 							}
 
-							if err := peer.RegisterSwitch(ctx, token, *taddr); err != nil {
+							caPEM, err := peer.RegisterSwitch(ctx, token, *taddr)
+							if err != nil {
 								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
 							}
+
+							services.SetSwitchCA(l, caPEM)
 
 							if *verbose {
 								log.Println("Registered with router with ID", remoteID)

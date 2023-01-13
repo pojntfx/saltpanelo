@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"log"
 	"net"
@@ -26,7 +27,7 @@ var (
 )
 
 type RouterRemote struct {
-	RegisterSwitch func(ctx context.Context, token string, addr string) error
+	RegisterSwitch func(ctx context.Context, token string, addr string) ([]byte, error)
 }
 
 func HandleRouterClientDisconnect(r *Router, g *Gateway, remoteID string) error {
@@ -72,6 +73,10 @@ type Router struct {
 
 	auth *auth.JWTAuthn
 
+	caCfg *x509.Certificate
+	caPEM,
+	caPrivKeyPEM []byte
+
 	Peers func() map[string]SwitchRemote
 }
 
@@ -87,6 +92,10 @@ func NewRouter(
 	oidcIssuer,
 	oidcClientID,
 	oidcAudience string,
+
+	caCfg *x509.Certificate,
+	caPEM,
+	caPrivKeyPEM []byte,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
@@ -104,6 +113,10 @@ func NewRouter(
 		verbose: verbose,
 
 		auth: auth.NewJWTAuthn(oidcIssuer, oidcClientID, oidcAudience),
+
+		caCfg:        caCfg,
+		caPEM:        caPEM,
+		caPrivKeyPEM: caPrivKeyPEM,
 	}
 }
 
@@ -509,9 +522,9 @@ func unprovisionSwitchesAndAdapters(switchesToClose map[string][]SwitchRemote, a
 	wg.Wait()
 }
 
-func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) error {
+func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) ([]byte, error) {
 	if err := r.auth.Validate(token); err != nil {
-		return err
+		return []byte{}, err
 	}
 
 	remoteID := rpc.GetRemoteID(ctx)
@@ -521,7 +534,7 @@ func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) 
 	if _, ok := r.switches[remoteID]; ok {
 		r.switchesLock.Unlock()
 
-		return ErrSwitchAlreadyRegistered
+		return []byte{}, ErrSwitchAlreadyRegistered
 	}
 
 	r.switches[remoteID] = SwitchMetadata{
@@ -536,5 +549,9 @@ func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) 
 
 	r.switchesLock.Unlock()
 
-	return r.updateGraphs(context.Background())
+	if err := r.updateGraphs(context.Background()); err != nil {
+		return []byte{}, err
+	}
+
+	return r.caPEM, nil
 }
