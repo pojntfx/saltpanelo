@@ -29,6 +29,7 @@ func main() {
 	gatewayOIDCClientID := flag.String("gateway-oidc-client-id", "", "Gateway OIDC client ID")
 	routerOIDCIssuer := flag.String("router-oidc-issuer", "", "Router OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
 	routerOIDCClientID := flag.String("router-oidc-client-id", "", "Router OIDC client ID")
+	routerOIDCAudience := flag.String("router-oidc-audience", "", "Router OIDC audience (e.g. https://saltpanelo-router)")
 	metricsAuthorizedEmail := flag.String("metrics-authorized-email", "", "Authorized email for metrics (e.g. jean.doe@example.com)")
 
 	flag.Parse()
@@ -74,6 +75,7 @@ func main() {
 
 		*routerOIDCIssuer,
 		*routerOIDCClientID,
+		*routerOIDCAudience,
 	)
 	gateway := services.NewGateway(
 		*verbose,
@@ -81,11 +83,15 @@ func main() {
 		*gatewayOIDCClientID,
 	)
 
-	if err := gateway.Open(ctx); err != nil {
+	if err := metrics.Open(ctx); err != nil {
 		panic(err)
 	}
 
-	if err := metrics.Open(ctx); err != nil {
+	if err := router.Open(ctx); err != nil {
+		panic(err)
+	}
+
+	if err := gateway.Open(ctx); err != nil {
 		panic(err)
 	}
 

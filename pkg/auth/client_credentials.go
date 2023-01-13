@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/url"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 var (
@@ -17,6 +19,7 @@ type TokenManagerClientCredentials struct {
 	oidcIssuer       string
 	oidcClientID     string
 	oidcClientSecret string
+	oidcAudience     string
 
 	tokenSource oauth2.TokenSource
 
@@ -27,6 +30,7 @@ func NewTokenManagerClientCredentials(
 	oidcIssuer string,
 	oidcClientID string,
 	oidcClientSecret string,
+	oidcAudience string,
 
 	ctx context.Context,
 ) *TokenManagerClientCredentials {
@@ -34,6 +38,7 @@ func NewTokenManagerClientCredentials(
 		oidcIssuer:       oidcIssuer,
 		oidcClientID:     oidcClientID,
 		oidcClientSecret: oidcClientSecret,
+		oidcAudience:     oidcAudience,
 
 		ctx: ctx,
 	}
@@ -45,16 +50,18 @@ func (t *TokenManagerClientCredentials) InitialLogin() error {
 		return err
 	}
 
-	config := &oauth2.Config{
-		ClientID:     t.oidcClientID,
-		ClientSecret: t.oidcClientSecret,
-		Endpoint:     provider.Endpoint(),
-		Scopes:       []string{oidc.ScopeOpenID},
+	endpointParams := url.Values{}
+	endpointParams.Set("audience", t.oidcAudience)
+
+	config := &clientcredentials.Config{
+		ClientID:       t.oidcClientID,
+		ClientSecret:   t.oidcClientSecret,
+		TokenURL:       provider.Endpoint().TokenURL,
+		Scopes:         []string{},
+		EndpointParams: endpointParams,
 	}
 
-	// TODO: Get OAuth2 token without redirect (with client secret)
-
-	t.tokenSource = config.TokenSource(t.ctx, nil)
+	t.tokenSource = config.TokenSource(t.ctx)
 
 	return nil
 }
@@ -69,5 +76,5 @@ func (t *TokenManagerClientCredentials) GetIDToken() (string, error) {
 		return "", err
 	}
 
-	return token.Extra("id_token").(string), nil
+	return token.AccessToken, nil
 }

@@ -25,6 +25,7 @@ func main() {
 	oidcIssuer := flag.String("oidc-issuer", "", "OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
 	oidcClientID := flag.String("oidc-client-id", "", "OIDC client ID")
 	oidcClientSecret := flag.String("oidc-client-secret", "", "OIDC client secret")
+	oidcAudience := flag.String("oidc-audience", "", "Router OIDC audience (e.g. https://saltpanelo-router)")
 
 	flag.Parse()
 
@@ -56,6 +57,7 @@ func main() {
 		*oidcIssuer,
 		*oidcClientID,
 		*oidcClientSecret,
+		*oidcAudience,
 
 		ctx,
 	)

@@ -70,7 +70,7 @@ type Router struct {
 
 	verbose bool
 
-	auth *auth.Authn
+	auth *auth.JWTAuthn
 
 	Peers func() map[string]SwitchRemote
 }
@@ -85,7 +85,8 @@ func NewRouter(
 	throughputChunks int64,
 
 	oidcIssuer,
-	oidcClientID string,
+	oidcClientID,
+	oidcAudience string,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
@@ -102,8 +103,12 @@ func NewRouter(
 
 		verbose: verbose,
 
-		auth: auth.NewAuthn(oidcIssuer, oidcClientID),
+		auth: auth.NewJWTAuthn(oidcIssuer, oidcClientID, oidcAudience),
 	}
+}
+
+func (r *Router) Open(ctx context.Context) error {
+	return r.auth.Open(ctx)
 }
 
 func (r *Router) updateGraphs(ctx context.Context) error {
@@ -505,7 +510,7 @@ func unprovisionSwitchesAndAdapters(switchesToClose map[string][]SwitchRemote, a
 }
 
 func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) error {
-	if _, err := r.auth.Validate(token); err != nil {
+	if err := r.auth.Validate(token); err != nil {
 		return err
 	}
 

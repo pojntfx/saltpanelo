@@ -11,7 +11,7 @@ var (
 	ErrClosed = errors.New("authenticator has not been opened")
 )
 
-type Authn struct {
+type OIDCAuthn struct {
 	issuer   string
 	clientID string
 
@@ -20,14 +20,14 @@ type Authn struct {
 	verifier *oidc.IDTokenVerifier
 }
 
-func NewAuthn(issuer string, clientID string) *Authn {
-	return &Authn{
+func NewOIDCAuthn(issuer string, clientID string) *OIDCAuthn {
+	return &OIDCAuthn{
 		issuer:   issuer,
 		clientID: clientID,
 	}
 }
 
-func (a *Authn) Open(ctx context.Context) error {
+func (a *OIDCAuthn) Open(ctx context.Context) error {
 	provider, err := oidc.NewProvider(ctx, a.issuer)
 	if err != nil {
 		return err
@@ -39,9 +39,9 @@ func (a *Authn) Open(ctx context.Context) error {
 	return nil
 }
 
-func (a *Authn) Validate(token string) (string, error) {
+func (a *OIDCAuthn) Validate(token string) (string, error) {
 	if a.verifier == nil {
-		return "", ErrNotLoggedIn
+		return "", ErrClosed
 	}
 
 	t, err := a.verifier.Verify(a.ctx, token)

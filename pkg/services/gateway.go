@@ -50,7 +50,7 @@ type Gateway struct {
 	adaptersLock sync.Mutex
 	adapters     map[string]AdapterMetadata
 
-	auth *auth.Authn
+	auth *auth.OIDCAuthn
 
 	Router *Router
 
@@ -68,7 +68,7 @@ func NewGateway(
 
 		adapters: map[string]AdapterMetadata{},
 
-		auth: auth.NewAuthn(oidcIssuer, oidcClientID),
+		auth: auth.NewOIDCAuthn(oidcIssuer, oidcClientID),
 	}
 }
 

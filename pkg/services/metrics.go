@@ -16,7 +16,7 @@ func HandleMetricsClientConnect(router *Router) error {
 type Metrics struct {
 	verbose bool
 
-	auth            *auth.Authn
+	auth            *auth.OIDCAuthn
 	authorizedEmail string
 
 	Peers func() map[string]VisualizerRemote
@@ -31,7 +31,7 @@ func NewMetrics(
 	return &Metrics{
 		verbose: verbose,
 
-		auth:            auth.NewAuthn(oidcIssuer, oidcClientID),
+		auth:            auth.NewOIDCAuthn(oidcIssuer, oidcClientID),
 		authorizedEmail: authorizedEmail,
 	}
 }
