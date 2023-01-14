@@ -2,6 +2,9 @@ package services
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"io"
 	"log"
 	"math/rand"
@@ -9,6 +12,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pojntfx/saltpanelo/pkg/utils"
+)
+
+var (
+	ErrUnauthenticatedRole  = errors.New("unauthenticated role")
+	ErrUnauthenticatedRoute = errors.New("unauthenticated route")
 )
 
 func SetSwitchCA(sw *Switch, caPEM []byte) {
@@ -19,7 +29,15 @@ type SwitchRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
-	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) ([]string, error)
+	GetPublicIP      func(ctx context.Context) (string, error)
+	ProvisionRoute   func(
+		ctx context.Context,
+		routeID string,
+		raddr string,
+		switchListenCert,
+		switchClientCert,
+		adapterListenCert CertPair,
+	) ([]string, error)
 }
 
 type ThroughputResult struct {
@@ -95,7 +113,22 @@ func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
 	return nil
 }
 
-func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr string) ([]string, error) {
+func (s *Switch) GetPublicIP(ctx context.Context) (string, error) {
+	if s.verbose {
+		log.Println("Getting public IP")
+	}
+
+	return s.ahost, nil
+}
+
+func (s *Switch) ProvisionRoute(
+	ctx context.Context,
+	routeID string,
+	raddr string,
+	switchListenCert,
+	switchClientCert,
+	adapterListenCert CertPair,
+) ([]string, error) {
 	if s.verbose {
 		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
 	}
@@ -109,37 +142,78 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 	errs := make(chan error)
 	addrs := []string{}
 
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(s.caPEM)
+
+	baseConfig := &tls.Config{
+		ClientCAs:  caCertPool,
+		ClientAuth: tls.RequireAndVerifyClientCert,
+	}
+
 	if strings.TrimSpace(raddr) == "" {
 		laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 		if err != nil {
 			return []string{}, err
 		}
 
-		lis, err := net.ListenTCP("tcp", laddr)
+		cer, err := tls.X509KeyPair(adapterListenCert.CertPEM, adapterListenCert.CertPrivKeyPEM)
 		if err != nil {
 			return []string{}, err
 		}
+
+		lis, err := tls.Listen("tcp", laddr.String(), &tls.Config{
+			Certificates: []tls.Certificate{cer},
+			ClientCAs:    baseConfig.ClientCAs,
+			ClientAuth:   baseConfig.ClientAuth,
+			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+				cert := verifiedChains[0][0]
+
+				if cert.Subject.CommonName != utils.RoleAdapterClient {
+					return ErrUnauthenticatedRole
+				}
+
+				if len(cert.Subject.Country) < 1 || cert.Subject.Country[0] != routeID {
+					return ErrUnauthenticatedRoute
+				}
+
+				return baseConfig.VerifyPeerCertificate(rawCerts, verifiedChains)
+			},
+		})
+		if err != nil {
+			return []string{}, err
+		}
+
 		cp.src = lis
 		addrs = append(addrs, lis.Addr().String())
 
 		go func() {
-			conn, err := lis.Accept()
-			if err != nil {
-				if s.verbose {
-					log.Println("Could not accept src connection, stopping:", err)
+			for {
+				conn, err := lis.Accept()
+				if err != nil {
+					if s.verbose {
+						log.Println("Could not accept src connection, skipping:", err)
+					}
+
+					continue
 				}
 
-				errs <- err
+				src = conn
 
-				return
+				ready <- struct{}{}
+
+				break
 			}
-
-			src = conn
-
-			ready <- struct{}{}
 		}()
 	} else {
-		conn, err := net.Dial("tcp", raddr)
+		cer, err := tls.X509KeyPair(switchClientCert.CertPEM, switchClientCert.CertPrivKeyPEM)
+		if err != nil {
+			return []string{}, err
+		}
+
+		conn, err := tls.Dial("tcp", raddr, &tls.Config{
+			RootCAs:      baseConfig.ClientCAs,
+			Certificates: []tls.Certificate{cer},
+		})
 		if err != nil {
 			return []string{}, err
 		}
@@ -157,28 +231,67 @@ func (s *Switch) ProvisionRoute(ctx context.Context, routeID string, raddr strin
 		return []string{}, err
 	}
 
-	lis, err := net.ListenTCP("tcp", laddr)
+	var cer tls.Certificate
+	if len(switchListenCert.CertPEM) > 0 {
+		cer, err = tls.X509KeyPair(switchListenCert.CertPEM, switchListenCert.CertPrivKeyPEM)
+		if err != nil {
+			return []string{}, err
+		}
+	} else {
+		cer, err = tls.X509KeyPair(adapterListenCert.CertPEM, adapterListenCert.CertPrivKeyPEM)
+		if err != nil {
+			return []string{}, err
+		}
+	}
+
+	lis, err := tls.Listen("tcp", laddr.String(), &tls.Config{
+		Certificates: []tls.Certificate{cer},
+		ClientCAs:    baseConfig.ClientCAs,
+		ClientAuth:   baseConfig.ClientAuth,
+		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			cert := verifiedChains[0][0]
+
+			if len(switchListenCert.CertPEM) > 0 {
+				if cert.Subject.CommonName != utils.RoleSwitchClient {
+					return ErrUnauthenticatedRole
+				}
+			} else {
+				if cert.Subject.CommonName != utils.RoleAdapterClient {
+					return ErrUnauthenticatedRole
+				}
+			}
+
+			if len(cert.Subject.Country) < 1 || cert.Subject.Country[0] != routeID {
+				return ErrUnauthenticatedRoute
+			}
+
+			return baseConfig.VerifyPeerCertificate(rawCerts, verifiedChains)
+		},
+	})
 	if err != nil {
 		return []string{}, err
 	}
+
 	cp.dst = lis
 	addrs = append(addrs, lis.Addr().String())
 
 	go func() {
-		conn, err := lis.Accept()
-		if err != nil {
-			if s.verbose {
-				log.Println("Could not accept dst connection, stopping:", err)
+		for {
+			conn, err := lis.Accept()
+			if err != nil {
+				if s.verbose {
+					log.Println("Could not accept src connection, skipping:", err)
+				}
+
+				continue
 			}
 
-			errs <- err
+			dst = conn
 
-			return
+			ready <- struct{}{}
+
+			break
 		}
-
-		dst = conn
-
-		ready <- struct{}{}
 	}()
 
 	go func() {

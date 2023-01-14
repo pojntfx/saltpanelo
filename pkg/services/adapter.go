@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io"
 	"log"
@@ -23,7 +25,12 @@ type AdapterRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
-	ProvisionRoute   func(ctx context.Context, routeID string, raddr string) error
+	ProvisionRoute   func(
+		ctx context.Context,
+		routeID string,
+		raddr string,
+		cert CertPair,
+	) error
 }
 
 func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
@@ -147,7 +154,12 @@ func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
 	return a.onCallDisconnected(ctx, routeID)
 }
 
-func (a *Adapter) ProvisionRoute(ctx context.Context, routeID string, raddr string) error {
+func (a *Adapter) ProvisionRoute(
+	ctx context.Context,
+	routeID string,
+	raddr string,
+	cert CertPair,
+) error {
 	if a.verbose {
 		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
 	}
@@ -160,7 +172,18 @@ func (a *Adapter) ProvisionRoute(ctx context.Context, routeID string, raddr stri
 	ready := make(chan struct{})
 	errs := make(chan error)
 
-	conn, err := net.Dial("tcp", raddr)
+	cer, err := tls.X509KeyPair(cert.CertPEM, cert.CertPrivKeyPEM)
+	if err != nil {
+		return err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(a.caPEM)
+
+	conn, err := tls.Dial("tcp", raddr, &tls.Config{
+		RootCAs:      caCertPool,
+		Certificates: []tls.Certificate{cer},
+	})
 	if err != nil {
 		return err
 	}

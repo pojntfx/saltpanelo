@@ -8,11 +8,18 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"net"
+	"strings"
 	"time"
 )
 
 const (
 	rsaBits = 4096
+
+	RoleSwitchListener  = "switch-listener"
+	RoleSwitchClient    = "switch-client"
+	RoleAdapterListener = "adapter-listener"
+	RoleAdapterClient   = "adapter-client"
 )
 
 func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []byte, []byte, error) {
@@ -58,18 +65,24 @@ func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []
 	return caCfg, caPEM.Bytes(), caPrivKeyPEM.Bytes(), nil
 }
 
-func GenerateCertificate(caCfg *x509.Certificate, validity time.Duration, laddr, raddr string) ([]byte, []byte, error) {
+func GenerateCertificate(caCfg *x509.Certificate, validity time.Duration, routeID, ip, role string) ([]byte, []byte, error) {
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
 	if err != nil {
 		return []byte{}, []byte{}, err
 	}
 
+	ips := []net.IP{}
+	if strings.TrimSpace(ip) != "" {
+		ips = append(ips, net.ParseIP(ip))
+	}
+
 	certCfg := &x509.Certificate{
 		SerialNumber: big.NewInt(time.Now().Unix()),
 		Subject: pkix.Name{
-			CommonName: "Saltpanelo Certificate",
-			Country:    []string{laddr, raddr},
+			CommonName: role,
+			Country:    []string{routeID},
 		},
+		IPAddresses: ips,
 		NotBefore:   time.Now(),
 		NotAfter:    time.Now().Add(validity),
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},

@@ -25,6 +25,7 @@ func main() {
 	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
+	certValidity := flag.Duration("cert-validity", time.Hour, "Time until generated certificates for calls become invalid")
 	gatewayOIDCIssuer := flag.String("gateway-oidc-issuer", "", "Gateway OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
 	gatewayOIDCClientID := flag.String("gateway-oidc-client-id", "", "Gateway OIDC client ID")
 	routerOIDCIssuer := flag.String("router-oidc-issuer", "", "Router OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
@@ -80,6 +81,8 @@ func main() {
 		caCfg,
 		caPEM,
 		caPrivKeyPEM,
+
+		*certValidity,
 	)
 	gateway := services.NewGateway(
 		*verbose,

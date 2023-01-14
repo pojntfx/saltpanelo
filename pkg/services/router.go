@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
+	"github.com/pojntfx/saltpanelo/pkg/utils"
 	"golang.org/x/exp/slices"
 )
 
@@ -50,6 +51,11 @@ type SwitchMetadata struct {
 	Throughputs map[string]ThroughputResult
 }
 
+type CertPair struct {
+	CertPEM        []byte
+	CertPrivKeyPEM []byte
+}
+
 type Router struct {
 	switchesLock sync.Mutex
 	switches     map[string]SwitchMetadata
@@ -77,6 +83,8 @@ type Router struct {
 	caPEM,
 	caPrivKeyPEM []byte
 
+	certValidity time.Duration
+
 	Peers func() map[string]SwitchRemote
 }
 
@@ -96,6 +104,8 @@ func NewRouter(
 	caCfg *x509.Certificate,
 	caPEM,
 	caPrivKeyPEM []byte,
+
+	certValidity time.Duration,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
@@ -117,6 +127,8 @@ func NewRouter(
 		caCfg:        caCfg,
 		caPEM:        caPEM,
 		caPrivKeyPEM: caPrivKeyPEM,
+
+		certValidity: certValidity,
 	}
 }
 
@@ -363,7 +375,61 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	egressLaddr := ""
 	ingressRaddr := ""
 	for i, sw := range switchesToProvision {
-		laddrs, err := sw.ProvisionRoute(context.Background(), routeID, ingressRaddr)
+		publicIP, err := sw.GetPublicIP(context.Background())
+		if err != nil {
+			return "", err
+		}
+
+		var (
+			switchListenCertPEM,
+			switchListenCertPrivKeyPEM,
+			switchClientCertPEM,
+			switchClientCertPrivKeyPEM,
+			adapterListenCertPEM,
+			adapterListenCertPrivKeyPEM []byte
+		)
+
+		// Create a switch listen certificate for all but the last switch in the chain
+		if i != len(switchesToProvision)-1 {
+			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, publicIP, utils.RoleSwitchListener)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		// Create a switch client certificate for all but the first switch in the chain
+		if i == 0 && i != len(switchesToProvision)-1 {
+			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleSwitchClient)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		// Create an adapter listen certificate for the first and last switches in the chain
+		if i == 0 || i == len(switchesToProvision)-1 {
+			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, publicIP, utils.RoleAdapterListener)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		laddrs, err := sw.ProvisionRoute(
+			context.Background(),
+			routeID,
+			ingressRaddr,
+			CertPair{
+				CertPEM:        switchListenCertPEM,
+				CertPrivKeyPEM: switchListenCertPrivKeyPEM,
+			},
+			CertPair{
+				CertPEM:        switchClientCertPEM,
+				CertPrivKeyPEM: switchClientCertPrivKeyPEM,
+			},
+			CertPair{
+				CertPEM:        adapterListenCertPEM,
+				CertPrivKeyPEM: adapterListenCertPrivKeyPEM,
+			},
+		)
 		if err != nil {
 			return "", err
 		}
@@ -416,11 +482,37 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		return "", ErrAdapterNotFound
 	}
 
-	if err := dst.ProvisionRoute(context.Background(), routeID, egressLaddr); err != nil {
+	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	if err != nil {
 		return "", err
 	}
 
-	if err := src.ProvisionRoute(context.Background(), routeID, ingressRaddr); err != nil {
+	if err := dst.ProvisionRoute(
+		context.Background(),
+		routeID,
+		egressLaddr,
+		CertPair{
+			CertPEM:        adapterDstCertPEM,
+			CertPrivKeyPEM: adapterDstCertPrivKeyPEM,
+		},
+	); err != nil {
+		return "", err
+	}
+
+	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	if err != nil {
+		return "", err
+	}
+
+	if err := src.ProvisionRoute(
+		context.Background(),
+		routeID,
+		ingressRaddr,
+		CertPair{
+			CertPEM:        adapterSrcCertPEM,
+			CertPrivKeyPEM: adapterSrcCertPrivKeyPEM,
+		},
+	); err != nil {
 		return "", err
 	}
 
