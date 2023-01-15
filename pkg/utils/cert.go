@@ -22,10 +22,10 @@ const (
 	RoleAdapterClient   = "adapter-client"
 )
 
-func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []byte, *rsa.PrivateKey, error) {
+func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []byte, []byte, *rsa.PrivateKey, error) {
 	caPrivKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
 	if err != nil {
-		return nil, []byte{}, nil, err
+		return nil, []byte{}, []byte{}, nil, err
 	}
 
 	caCfg := &x509.Certificate{
@@ -43,7 +43,7 @@ func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []
 
 	ca, err := x509.CreateCertificate(rand.Reader, caCfg, caCfg, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		return nil, []byte{}, nil, err
+		return nil, []byte{}, []byte{}, nil, err
 	}
 
 	var caPEM bytes.Buffer
@@ -51,7 +51,7 @@ func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []
 		Type:  "CERTIFICATE",
 		Bytes: ca,
 	}); err != nil {
-		return nil, []byte{}, nil, err
+		return nil, []byte{}, []byte{}, nil, err
 	}
 
 	var caPrivKeyPEM bytes.Buffer
@@ -59,10 +59,10 @@ func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
 	}); err != nil {
-		return nil, []byte{}, nil, err
+		return nil, []byte{}, []byte{}, nil, err
 	}
 
-	return caCfg, caPEM.Bytes(), caPrivKey, nil
+	return caCfg, caPEM.Bytes(), caPrivKeyPEM.Bytes(), caPrivKey, nil
 }
 
 func GenerateCertificate(caCfg *x509.Certificate, caPrivKey *rsa.PrivateKey, validity time.Duration, routeID, ip, role string) ([]byte, []byte, error) {

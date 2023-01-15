@@ -2,9 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"flag"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,7 +21,17 @@ import (
 	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
 
+var (
+	errInvalidCertificateCount = errors.New("invalid certificate count")
+)
+
 func main() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	workdir := flag.String("workdir", filepath.Join(home, ".local", "share", "saltpanelo", "var", "lib", "saltpanelo"), "Working directory")
 	routerLaddr := flag.String("router-laddr", ":1337", "Router listen address")
 	gatewayLaddr := flag.String("gateway-laddr", ":1338", "Gateway listen address")
 	metricsLaddr := flag.String("metrics-laddr", ":1339", "Metrics listen address")
@@ -50,13 +67,84 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if err := os.MkdirAll(*workdir, os.ModePerm); err != nil {
+		panic(err)
+	}
+
 	if *verbose {
 		log.Println("Generating certificate authority")
 	}
 
-	caCfg, caPEM, caPrivKeyPEM, err := utils.GenerateCertificateAuthority(*caValidity)
-	if err != nil {
-		panic(err)
+	regenerateCertificate := false
+
+	var (
+		caPEMPath        = filepath.Join(*workdir, "ca.cert.pem")
+		caPrivKeyPEMPath = filepath.Join(*workdir, "ca.key.pem")
+	)
+	if _, err := os.Stat(caPEMPath); err != nil {
+		regenerateCertificate = true
+	}
+	if _, err := os.Stat(caPrivKeyPEMPath); err != nil {
+		regenerateCertificate = true
+	}
+
+	var (
+		caCfg *x509.Certificate
+		caPEM,
+		caPrivKeyPEM []byte
+		caPrivKey *rsa.PrivateKey
+	)
+
+regenerate:
+	if regenerateCertificate {
+		caCfg, caPEM, caPrivKeyPEM, caPrivKey, err = utils.GenerateCertificateAuthority(*caValidity)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := os.WriteFile(caPEMPath, caPEM, os.ModePerm); err != nil {
+			panic(err)
+		}
+
+		if err := os.WriteFile(caPrivKeyPEMPath, caPrivKeyPEM, os.ModePerm); err != nil {
+			panic(err)
+		}
+	} else {
+		caPEM, err = os.ReadFile(caPEMPath)
+		if err != nil {
+			panic(err)
+		}
+
+		caPrivKeyPEM, err = os.ReadFile(caPrivKeyPEMPath)
+		if err != nil {
+			panic(err)
+		}
+
+		cer, err := tls.X509KeyPair(caPEM, caPrivKeyPEM)
+		if err != nil {
+			panic(err)
+		}
+
+		if len(cer.Certificate) < 1 {
+			panic(errInvalidCertificateCount)
+		}
+
+		caCfg, err = x509.ParseCertificate(cer.Certificate[0])
+		if err != nil {
+			panic(err)
+		}
+
+		if caCfg.NotAfter.Before(time.Now()) {
+			regenerateCertificate = true
+
+			goto regenerate
+		}
+
+		b, _ := pem.Decode(caPrivKeyPEM)
+		caPrivKey, err = x509.ParsePKCS1PrivateKey(b.Bytes)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	metrics := services.NewMetrics(
@@ -80,7 +168,7 @@ func main() {
 
 		caCfg,
 		caPEM,
-		caPrivKeyPEM,
+		caPrivKey,
 
 		*certValidity,
 	)
