@@ -71,9 +71,9 @@ func main() {
 	l = services.NewAdapter(
 		*verbose,
 		*ahost,
-		func(ctx context.Context, srcID string) (bool, error) {
+		func(ctx context.Context, srcID, routeID, channelID string) (bool, error) {
 			if err := zenity.Question(
-				fmt.Sprintf("Incoming call from remote with with ID %v, do you want to answer it?", srcID),
+				fmt.Sprintf("Incoming call from remote with with ID %v, route ID %v and channel ID %v, do you want to answer it?", srcID, routeID, channelID),
 				zenity.Title("Incoming Call"),
 				zenity.QuestionIcon,
 				zenity.OKLabel("Answer"),
@@ -211,7 +211,14 @@ func main() {
 
 	go func() {
 		for {
-			dstID, err := zenity.Entry("ID to call", zenity.Title("Dialer"))
+			dstID, err := zenity.Entry("Peer ID to call", zenity.Title("Dialer"))
+			if err != nil {
+				errs <- err
+
+				return
+			}
+
+			channelID, err := zenity.Entry("Channel ID to call", zenity.Title("Dialer"))
 			if err != nil {
 				errs <- err
 
@@ -226,7 +233,7 @@ func main() {
 					return
 				}
 
-				requestCallResult, err := peer.RequestCall(ctx, token, dstID)
+				requestCallResult, err := peer.RequestCall(ctx, token, dstID, channelID)
 				if err != nil {
 					errs <- err
 

@@ -21,7 +21,7 @@ func SetAdapterCA(adapter *Adapter, caPEM []byte) {
 }
 
 type AdapterRemote struct {
-	RequestCall      func(ctx context.Context, srcID string) (bool, error)
+	RequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
@@ -33,15 +33,15 @@ type AdapterRemote struct {
 	) error
 }
 
-func RequestCall(adapter *Adapter, dstID string) (bool, string, error) {
-	return adapter.requestCall(context.Background(), dstID)
+func RequestCall(adapter *Adapter, dstID, channelID string) (bool, string, error) {
+	return adapter.requestCall(context.Background(), dstID, channelID)
 }
 
 type Adapter struct {
 	verbose bool
 	ahost   string
 
-	onRequestCall      func(ctx context.Context, srcID string) (bool, error)
+	onRequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
 	onCallDisconnected func(ctx context.Context, routeID string) error
 	onHandleCall       func(ctx context.Context, routeID, raddr string) error
 	getIDToken         func() (string, error)
@@ -58,7 +58,7 @@ func NewAdapter(
 	verbose bool,
 	ahost string,
 
-	onRequestCall func(ctx context.Context, srcID string) (bool, error),
+	onRequestCall func(ctx context.Context, srcID, routeID, channelID string) (bool, error),
 	onCallDisconnected func(ctx context.Context, routeID string) error,
 	onHandleCall func(ctx context.Context, routeID, raddr string) error,
 	getIDToken func() (string, error),
@@ -78,18 +78,21 @@ func NewAdapter(
 
 func (a *Adapter) RequestCall(
 	ctx context.Context,
-	srcID string,
+	srcID,
+	routeID,
+	channelID string,
 ) (bool, error) {
 	if a.verbose {
 		log.Println("Remote with ID", srcID, "is requesting a call")
 	}
 
-	return a.onRequestCall(ctx, srcID)
+	return a.onRequestCall(ctx, srcID, routeID, channelID)
 }
 
 func (a *Adapter) requestCall(
 	ctx context.Context,
 	dstID string,
+	channelID string,
 ) (bool, string, error) {
 	if a.verbose {
 		log.Println("Requesting a call with ID", dstID)
@@ -101,7 +104,7 @@ func (a *Adapter) requestCall(
 	}
 
 	for _, peer := range a.Peers() {
-		requestCallResult, err := peer.RequestCall(ctx, token, dstID)
+		requestCallResult, err := peer.RequestCall(ctx, token, dstID, channelID)
 		if err != nil {
 			return false, "", err
 		}

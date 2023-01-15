@@ -21,7 +21,7 @@ var (
 
 type GatewayRemote struct {
 	RegisterAdapter func(ctx context.Context, token string) ([]byte, error)
-	RequestCall     func(ctx context.Context, token string, dstID string) (RequestCallResult, error)
+	RequestCall     func(ctx context.Context, token string, dstID, channelID string) (RequestCallResult, error)
 	HangupCall      func(ctx context.Context, token string, routeID string) error
 }
 
@@ -207,7 +207,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context, token string) ([]byte, er
 	return g.caPEM, nil
 }
 
-func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (RequestCallResult, error) {
+func (g *Gateway) RequestCall(ctx context.Context, token string, dstID, channelID string) (RequestCallResult, error) {
 	if _, err := g.auth.Validate(token); err != nil {
 		return RequestCallResult{}, err
 	}
@@ -218,7 +218,7 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (
 	g.adaptersLock.Lock()
 
 	if g.verbose {
-		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID, "with route ID", routeID)
+		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID, "with route ID", routeID, "and channel ID", channelID)
 	}
 
 	if _, ok := g.adapters[dstID]; !ok {
@@ -260,6 +260,8 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (
 	accept, err := dst.RequestCall(
 		ctx,
 		remoteID,
+		routeID,
+		channelID,
 	)
 	if err != nil {
 		return RequestCallResult{}, err
