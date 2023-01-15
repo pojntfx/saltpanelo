@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
 )
@@ -212,11 +213,12 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (
 	}
 
 	remoteID := rpc.GetRemoteID(ctx)
+	routeID := uuid.NewString()
 
 	g.adaptersLock.Lock()
 
 	if g.verbose {
-		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID)
+		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID, "with route ID", routeID)
 	}
 
 	if _, ok := g.adapters[dstID]; !ok {
@@ -315,8 +317,7 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID string) (
 		return RequestCallResult{}, err
 	}
 
-	routeID, err := g.Router.provisionRoute(remoteID, dstID)
-	if err != nil {
+	if err := g.Router.provisionRoute(remoteID, dstID, routeID); err != nil {
 		return RequestCallResult{}, err
 	}
 

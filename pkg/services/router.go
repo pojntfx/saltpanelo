@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/dominikbraun/graph"
-	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/utils"
@@ -329,9 +328,9 @@ func (r *Router) getSwitches() map[string]SwitchMetadata {
 	return a
 }
 
-func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
+func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 	if r.verbose {
-		log.Println("Provisioning route from", srcID, "to", dstID)
+		log.Println("Provisioning route from", srcID, "to", dstID, "with route ID", routeID)
 	}
 
 	r.graphLock.Lock()
@@ -340,18 +339,16 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	if err != nil {
 		r.graphLock.Unlock()
 
-		return "", err
+		return err
 	}
 
 	if len(path) < 3 {
 		r.graphLock.Unlock()
 
-		return "", ErrRouteNotFound
+		return ErrRouteNotFound
 	}
 
 	r.graphLock.Unlock()
-
-	routeID := uuid.NewString()
 
 	routerPeers := r.Peers()
 	switches := r.getSwitches()
@@ -361,12 +358,12 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	for _, swID := range path[1 : len(path)-1] {
 		sw, ok := routerPeers[swID]
 		if !ok {
-			return "", ErrSwitchNotFound
+			return ErrSwitchNotFound
 		}
 
 		md, ok := switches[swID]
 		if !ok {
-			return "", ErrSwitchNotFound
+			return ErrSwitchNotFound
 		}
 
 		switchesToProvision = append([]SwitchRemote{sw}, switchesToProvision...)
@@ -378,7 +375,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	for i, sw := range switchesToProvision {
 		publicIP, err := sw.GetPublicIP(context.Background())
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		var (
@@ -394,7 +391,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		if i != len(switchesToProvision)-1 {
 			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleSwitchListener)
 			if err != nil {
-				return "", err
+				return err
 			}
 		}
 
@@ -402,7 +399,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		if i == 0 && i != len(switchesToProvision)-1 {
 			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleSwitchClient)
 			if err != nil {
-				return "", err
+				return err
 			}
 		}
 
@@ -410,7 +407,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		if i == 0 || i == len(switchesToProvision)-1 {
 			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleAdapterListener)
 			if err != nil {
-				return "", err
+				return err
 			}
 		}
 
@@ -432,22 +429,22 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 			},
 		)
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		newRaddr, err := net.ResolveTCPAddr("tcp", switchMetadata[i].Addr)
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		if i == 0 {
 			if len(laddrs) != 2 {
-				return "", ErrInvalidPortsCount
+				return ErrInvalidPortsCount
 			}
 
 			newLaddr, err := net.ResolveTCPAddr("tcp", laddrs[0])
 			if err != nil {
-				return "", err
+				return err
 			}
 
 			newRaddr.Port = newLaddr.Port
@@ -457,13 +454,13 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 			laddrs = []string{laddrs[1]}
 		} else {
 			if len(laddrs) != 1 {
-				return "", ErrInvalidPortsCount
+				return ErrInvalidPortsCount
 			}
 		}
 
 		newLaddr, err := net.ResolveTCPAddr("tcp", laddrs[0])
 		if err != nil {
-			return "", err
+			return err
 		}
 
 		newRaddr.Port = newLaddr.Port
@@ -475,17 +472,17 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 	dst, ok := adapters[path[0]]
 	if !ok {
-		return "", ErrAdapterNotFound
+		return ErrAdapterNotFound
 	}
 
 	src, ok := adapters[path[len(path)-1]]
 	if !ok {
-		return "", ErrAdapterNotFound
+		return ErrAdapterNotFound
 	}
 
 	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if err := dst.ProvisionRoute(
@@ -497,12 +494,12 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 			CertPrivKeyPEM: adapterDstCertPrivKeyPEM,
 		},
 	); err != nil {
-		return "", err
+		return err
 	}
 
 	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if err := src.ProvisionRoute(
@@ -514,7 +511,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 			CertPrivKeyPEM: adapterSrcCertPrivKeyPEM,
 		},
 	); err != nil {
-		return "", err
+		return err
 	}
 
 	r.routesLock.Lock()
@@ -522,10 +519,10 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 	r.routesLock.Unlock()
 
 	if err := r.updateGraphs(context.Background()); err != nil {
-		return "", err
+		return err
 	}
 
-	return routeID, nil
+	return nil
 }
 
 func unprovisionRouteForPeer(r *Router, g *Gateway, remoteID string) error {
