@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/x509"
 	"errors"
 	"log"
 	"sync"
@@ -53,9 +52,7 @@ type Gateway struct {
 
 	auth *auth.OIDCAuthn
 
-	caCfg *x509.Certificate
-	caPEM,
-	caPrivKeyPEM []byte
+	caPEM []byte
 
 	Router *Router
 
@@ -68,9 +65,7 @@ func NewGateway(
 	oidcIssuer,
 	oidcClientID string,
 
-	caCfg *x509.Certificate,
-	caPEM,
-	caPrivKeyPEM []byte,
+	caPEM []byte,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
@@ -79,9 +74,7 @@ func NewGateway(
 
 		auth: auth.NewOIDCAuthn(oidcIssuer, oidcClientID),
 
-		caCfg:        caCfg,
-		caPEM:        caPEM,
-		caPrivKeyPEM: caPrivKeyPEM,
+		caPEM: caPEM,
 	}
 }
 

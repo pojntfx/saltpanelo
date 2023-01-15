@@ -90,9 +90,7 @@ func main() {
 		*gatewayOIDCIssuer,
 		*gatewayOIDCClientID,
 
-		caCfg,
 		caPEM,
-		caPrivKeyPEM,
 	)
 
 	if err := metrics.Open(ctx); err != nil {

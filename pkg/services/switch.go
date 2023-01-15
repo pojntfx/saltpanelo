@@ -145,11 +145,6 @@ func (s *Switch) ProvisionRoute(
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(s.caPEM)
 
-	baseConfig := &tls.Config{
-		ClientCAs:  caCertPool,
-		ClientAuth: tls.RequireAndVerifyClientCert,
-	}
-
 	if strings.TrimSpace(raddr) == "" {
 		laddr, err := net.ResolveTCPAddr("tcp", s.ahost+":0")
 		if err != nil {
@@ -163,8 +158,8 @@ func (s *Switch) ProvisionRoute(
 
 		lis, err := tls.Listen("tcp", laddr.String(), &tls.Config{
 			Certificates: []tls.Certificate{cer},
-			ClientCAs:    baseConfig.ClientCAs,
-			ClientAuth:   baseConfig.ClientAuth,
+			ClientCAs:    caCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				cert := verifiedChains[0][0]
 
@@ -176,7 +171,7 @@ func (s *Switch) ProvisionRoute(
 					return ErrUnauthenticatedRoute
 				}
 
-				return baseConfig.VerifyPeerCertificate(rawCerts, verifiedChains)
+				return nil
 			},
 		})
 		if err != nil {
@@ -188,11 +183,36 @@ func (s *Switch) ProvisionRoute(
 
 		go func() {
 			for {
-				conn, err := lis.Accept()
+				rawConn, err := lis.Accept()
 				if err != nil {
+					if errors.Is(err, net.ErrClosed) {
+						return
+					}
+
 					if s.verbose {
 						log.Println("Could not accept src connection, skipping:", err)
 					}
+
+					continue
+				}
+
+				conn, ok := rawConn.(*tls.Conn)
+				if !ok {
+					if s.verbose {
+						log.Println("Could not accept non-TLS connection, skipping:", err)
+					}
+
+					_ = conn.Close()
+
+					continue
+				}
+
+				if err := conn.Handshake(); err != nil {
+					if s.verbose {
+						log.Println("Could not hanshake TLS connection, skipping:", err)
+					}
+
+					_ = conn.Close()
 
 					continue
 				}
@@ -211,7 +231,7 @@ func (s *Switch) ProvisionRoute(
 		}
 
 		conn, err := tls.Dial("tcp", raddr, &tls.Config{
-			RootCAs:      baseConfig.ClientCAs,
+			RootCAs:      caCertPool,
 			Certificates: []tls.Certificate{cer},
 		})
 		if err != nil {
@@ -246,8 +266,8 @@ func (s *Switch) ProvisionRoute(
 
 	lis, err := tls.Listen("tcp", laddr.String(), &tls.Config{
 		Certificates: []tls.Certificate{cer},
-		ClientCAs:    baseConfig.ClientCAs,
-		ClientAuth:   baseConfig.ClientAuth,
+		ClientCAs:    caCertPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			cert := verifiedChains[0][0]
 
@@ -265,7 +285,7 @@ func (s *Switch) ProvisionRoute(
 				return ErrUnauthenticatedRoute
 			}
 
-			return baseConfig.VerifyPeerCertificate(rawCerts, verifiedChains)
+			return nil
 		},
 	})
 	if err != nil {
@@ -277,11 +297,36 @@ func (s *Switch) ProvisionRoute(
 
 	go func() {
 		for {
-			conn, err := lis.Accept()
+			rawConn, err := lis.Accept()
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+
 				if s.verbose {
 					log.Println("Could not accept src connection, skipping:", err)
 				}
+
+				continue
+			}
+
+			conn, ok := rawConn.(*tls.Conn)
+			if !ok {
+				if s.verbose {
+					log.Println("Could not accept non-TLS connection, skipping:", err)
+				}
+
+				_ = conn.Close()
+
+				continue
+			}
+
+			if err := conn.Handshake(); err != nil {
+				if s.verbose {
+					log.Println("Could not hanshake TLS connection, skipping:", err)
+				}
+
+				_ = conn.Close()
 
 				continue
 			}
@@ -320,7 +365,7 @@ func (s *Switch) ProvisionRoute(
 			defer func() {
 				err := recover()
 
-				if s.verbose {
+				if s.verbose && err != nil {
 					log.Println("Could not copy from dst to src, stopping:", err)
 				}
 			}()
@@ -334,7 +379,7 @@ func (s *Switch) ProvisionRoute(
 			defer func() {
 				err := recover()
 
-				if s.verbose {
+				if s.verbose && err != nil {
 					log.Println("Could not copy from src to dst, stopping:", err)
 				}
 			}()

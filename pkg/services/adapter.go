@@ -249,7 +249,7 @@ func (a *Adapter) ProvisionRoute(
 			defer func() {
 				err := recover()
 
-				if a.verbose {
+				if a.verbose && err != nil {
 					log.Println("Could not copy from dst to src, stopping:", err)
 				}
 			}()
@@ -263,7 +263,7 @@ func (a *Adapter) ProvisionRoute(
 			defer func() {
 				err := recover()
 
-				if a.verbose {
+				if a.verbose && err != nil {
 					log.Println("Could not copy from src to dst, stopping:", err)
 				}
 			}()

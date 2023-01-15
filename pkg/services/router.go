@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"log"
@@ -79,9 +80,9 @@ type Router struct {
 
 	auth *auth.JWTAuthn
 
-	caCfg *x509.Certificate
-	caPEM,
-	caPrivKeyPEM []byte
+	caCfg     *x509.Certificate
+	caPEM     []byte
+	caPrivKey *rsa.PrivateKey
 
 	certValidity time.Duration
 
@@ -102,8 +103,8 @@ func NewRouter(
 	oidcAudience string,
 
 	caCfg *x509.Certificate,
-	caPEM,
-	caPrivKeyPEM []byte,
+	caPEM []byte,
+	caPrivKey *rsa.PrivateKey,
 
 	certValidity time.Duration,
 ) *Router {
@@ -124,9 +125,9 @@ func NewRouter(
 
 		auth: auth.NewJWTAuthn(oidcIssuer, oidcClientID, oidcAudience),
 
-		caCfg:        caCfg,
-		caPEM:        caPEM,
-		caPrivKeyPEM: caPrivKeyPEM,
+		caCfg:     caCfg,
+		caPEM:     caPEM,
+		caPrivKey: caPrivKey,
 
 		certValidity: certValidity,
 	}
@@ -391,7 +392,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 		// Create a switch listen certificate for all but the last switch in the chain
 		if i != len(switchesToProvision)-1 {
-			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, publicIP, utils.RoleSwitchListener)
+			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleSwitchListener)
 			if err != nil {
 				return "", err
 			}
@@ -399,7 +400,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 		// Create a switch client certificate for all but the first switch in the chain
 		if i == 0 && i != len(switchesToProvision)-1 {
-			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleSwitchClient)
+			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleSwitchClient)
 			if err != nil {
 				return "", err
 			}
@@ -407,7 +408,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 
 		// Create an adapter listen certificate for the first and last switches in the chain
 		if i == 0 || i == len(switchesToProvision)-1 {
-			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, publicIP, utils.RoleAdapterListener)
+			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleAdapterListener)
 			if err != nil {
 				return "", err
 			}
@@ -482,7 +483,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		return "", ErrAdapterNotFound
 	}
 
-	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
 		return "", err
 	}
@@ -499,7 +500,7 @@ func (r *Router) provisionRoute(srcID, dstID string) (string, error) {
 		return "", err
 	}
 
-	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
 		return "", err
 	}
