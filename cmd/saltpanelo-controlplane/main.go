@@ -43,6 +43,7 @@ func main() {
 	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
 	callCertValidity := flag.Duration("call-cert-validity", time.Hour, "Time until generated certificates for calls become invalid")
+	rsaBits := flag.Int("rsa-bits", 2048, "RSA bits to use when generating mTLS private keys")
 	benchmarkListenCertValidity := flag.Duration("benchmark-listen-cert-validity", time.Hour*24*30*365, "Time until generated certificates for switch benchmark listeners become invalid")
 	benchmarkClientCertValidity := flag.Duration("benchmark-client-cert-validity", time.Minute*5, "Time until generated certificates for benchmark clients become invalid")
 	gatewayOIDCIssuer := flag.String("gateway-oidc-issuer", "", "Gateway OIDC issuer (e.g. https://pojntfx.eu.auth0.com/)")
@@ -99,7 +100,7 @@ func main() {
 
 regenerate:
 	if regenerateCertificate {
-		caCfg, caPEM, caPrivKeyPEM, caPrivKey, err = utils.GenerateCertificateAuthority(*caValidity)
+		caCfg, caPEM, caPrivKeyPEM, caPrivKey, err = utils.GenerateCertificateAuthority(*rsaBits, *caValidity)
 		if err != nil {
 			panic(err)
 		}
@@ -175,6 +176,8 @@ regenerate:
 		*callCertValidity,
 		*benchmarkListenCertValidity,
 		*benchmarkClientCertValidity,
+
+		*rsaBits,
 	)
 	gateway := services.NewGateway(
 		*verbose,
@@ -187,6 +190,8 @@ regenerate:
 		caPrivKey,
 
 		*benchmarkClientCertValidity,
+
+		*rsaBits,
 	)
 
 	if err := metrics.Open(ctx); err != nil {

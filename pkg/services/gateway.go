@@ -62,6 +62,8 @@ type Gateway struct {
 
 	benchmarkClientCertValidity time.Duration
 
+	rsaBits int
+
 	Router *Router
 
 	Peers func() map[string]AdapterRemote
@@ -78,6 +80,8 @@ func NewGateway(
 	caPrivKey *rsa.PrivateKey,
 
 	benchmarkClientCertValidity time.Duration,
+
+	rsaBits int,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
@@ -91,6 +95,8 @@ func NewGateway(
 		caPrivKey: caPrivKey,
 
 		benchmarkClientCertValidity: benchmarkClientCertValidity,
+
+		rsaBits: rsaBits,
 	}
 }
 
@@ -133,7 +139,7 @@ func (g *Gateway) refreshPeerLatency(
 	addrs []string,
 	swIDs []string,
 ) error {
-	benchmarkClientCertPEM, benchmarkClientPrivKeyPEM, err := utils.GenerateCertificate(g.caCfg, g.caPrivKey, g.benchmarkClientCertValidity, "", "", utils.RoleBenchmarkClient)
+	benchmarkClientCertPEM, benchmarkClientPrivKeyPEM, err := utils.GenerateCertificate(g.rsaBits, g.caCfg, g.caPrivKey, g.benchmarkClientCertValidity, "", "", utils.RoleBenchmarkClient)
 	if err != nil {
 		return err
 	}

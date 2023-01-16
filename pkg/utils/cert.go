@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	rsaBits = 2048
-
 	RoleSwitchListener = "switch-listener"
 	RoleSwitchClient   = "switch-client"
 
@@ -26,7 +24,7 @@ const (
 	RoleBenchmarkClient   = "benchmark-client"
 )
 
-func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []byte, []byte, *rsa.PrivateKey, error) {
+func GenerateCertificateAuthority(rsaBits int, validity time.Duration) (*x509.Certificate, []byte, []byte, *rsa.PrivateKey, error) {
 	caPrivKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
 	if err != nil {
 		return nil, []byte{}, []byte{}, nil, err
@@ -69,7 +67,7 @@ func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []
 	return caCfg, caPEM.Bytes(), caPrivKeyPEM.Bytes(), caPrivKey, nil
 }
 
-func GenerateCertificate(caCfg *x509.Certificate, caPrivKey *rsa.PrivateKey, validity time.Duration, routeID, ip, role string) ([]byte, []byte, error) {
+func GenerateCertificate(rsaBits int, caCfg *x509.Certificate, caPrivKey *rsa.PrivateKey, validity time.Duration, routeID, ip, role string) ([]byte, []byte, error) {
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
 	if err != nil {
 		return []byte{}, []byte{}, err
