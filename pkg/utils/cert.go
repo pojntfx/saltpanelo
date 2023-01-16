@@ -14,12 +14,16 @@ import (
 )
 
 const (
-	rsaBits = 4096
+	rsaBits = 2048
 
-	RoleSwitchListener  = "switch-listener"
-	RoleSwitchClient    = "switch-client"
+	RoleSwitchListener = "switch-listener"
+	RoleSwitchClient   = "switch-client"
+
 	RoleAdapterListener = "adapter-listener"
 	RoleAdapterClient   = "adapter-client"
+
+	RoleBenchmarkListener = "benchmark-listener"
+	RoleBenchmarkClient   = "benchmark-client"
 )
 
 func GenerateCertificateAuthority(validity time.Duration) (*x509.Certificate, []byte, []byte, *rsa.PrivateKey, error) {

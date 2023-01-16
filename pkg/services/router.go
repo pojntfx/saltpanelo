@@ -28,7 +28,7 @@ var (
 )
 
 type RouterRemote struct {
-	RegisterSwitch func(ctx context.Context, token string, addr string) ([]byte, error)
+	RegisterSwitch func(ctx context.Context, token string, addr string) (SwitchConfiguration, error)
 }
 
 func HandleRouterClientDisconnect(r *Router, g *Gateway, remoteID string) error {
@@ -54,6 +54,11 @@ type SwitchMetadata struct {
 type CertPair struct {
 	CertPEM        []byte
 	CertPrivKeyPEM []byte
+}
+
+type SwitchConfiguration struct {
+	CAPEM               []byte
+	BenchmarkListenCert CertPair
 }
 
 type Router struct {
@@ -83,7 +88,9 @@ type Router struct {
 	caPEM     []byte
 	caPrivKey *rsa.PrivateKey
 
-	certValidity time.Duration
+	callCertValidity,
+	benchmarkListenCertValidity,
+	benchmarkClientCertValidity time.Duration
 
 	Peers func() map[string]SwitchRemote
 }
@@ -105,7 +112,9 @@ func NewRouter(
 	caPEM []byte,
 	caPrivKey *rsa.PrivateKey,
 
-	certValidity time.Duration,
+	callCertValidity time.Duration,
+	benchmarkListenCertValidity time.Duration,
+	benchmarkClientCertValidity time.Duration,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
@@ -128,7 +137,9 @@ func NewRouter(
 		caPEM:     caPEM,
 		caPrivKey: caPrivKey,
 
-		certValidity: certValidity,
+		callCertValidity:            callCertValidity,
+		benchmarkListenCertValidity: benchmarkListenCertValidity,
+		benchmarkClientCertValidity: benchmarkClientCertValidity,
 	}
 }
 
@@ -220,7 +231,15 @@ func (r *Router) onOpen() {
 					log.Println("Starting latency tests for switch with ID", remoteID)
 				}
 
-				testResults, err := peer.TestLatency(nil, r.testTimeout, addrs)
+				benchmarkClientCertPEM, benchmarkClientPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.benchmarkClientCertValidity, "", "", utils.RoleBenchmarkClient)
+				if err != nil {
+					return
+				}
+
+				testResults, err := peer.TestLatency(nil, r.testTimeout, addrs, CertPair{
+					CertPEM:        benchmarkClientCertPEM,
+					CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
+				})
 				if err != nil {
 					log.Println("Could not run latency test for switch with ID", remoteID, ", continuing:", err)
 
@@ -269,7 +288,15 @@ func (r *Router) onOpen() {
 					log.Println("Starting throughput tests for switch with ID", remoteID)
 				}
 
-				testResults, err := peer.TestThroughput(nil, r.testTimeout, addrs, r.throughputLength, r.throughputChunks)
+				benchmarkClientCertPEM, benchmarkClientPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.benchmarkClientCertValidity, "", "", utils.RoleBenchmarkClient)
+				if err != nil {
+					return
+				}
+
+				testResults, err := peer.TestThroughput(nil, r.testTimeout, addrs, r.throughputLength, r.throughputChunks, CertPair{
+					CertPEM:        benchmarkClientCertPEM,
+					CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
+				})
 				if err != nil {
 					log.Println("Could not run throughput test for switch with ID", remoteID, ", continuing:", err)
 
@@ -389,7 +416,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 
 		// Create a switch listen certificate for all but the last switch in the chain
 		if i != len(switchesToProvision)-1 {
-			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleSwitchListener)
+			switchListenCertPEM, switchListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, routeID, publicIP, utils.RoleSwitchListener)
 			if err != nil {
 				return err
 			}
@@ -397,7 +424,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 
 		// Create a switch client certificate for all but the first switch in the chain
 		if i == 0 && i != len(switchesToProvision)-1 {
-			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleSwitchClient)
+			switchClientCertPEM, switchClientCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, routeID, "", utils.RoleSwitchClient)
 			if err != nil {
 				return err
 			}
@@ -405,7 +432,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 
 		// Create an adapter listen certificate for the first and last switches in the chain
 		if i == 0 || i == len(switchesToProvision)-1 {
-			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, publicIP, utils.RoleAdapterListener)
+			adapterListenCertPEM, adapterListenCertPrivKeyPEM, err = utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, routeID, publicIP, utils.RoleAdapterListener)
 			if err != nil {
 				return err
 			}
@@ -480,7 +507,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 		return ErrAdapterNotFound
 	}
 
-	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	adapterDstCertPEM, adapterDstCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
 		return err
 	}
@@ -497,7 +524,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 		return err
 	}
 
-	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.certValidity, routeID, "", utils.RoleAdapterClient)
+	adapterSrcCertPEM, adapterSrcCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, routeID, "", utils.RoleAdapterClient)
 	if err != nil {
 		return err
 	}
@@ -612,19 +639,24 @@ func unprovisionSwitchesAndAdapters(switchesToClose map[string][]SwitchRemote, a
 	wg.Wait()
 }
 
-func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) ([]byte, error) {
+func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) (SwitchConfiguration, error) {
 	if err := r.auth.Validate(token); err != nil {
-		return []byte{}, err
+		return SwitchConfiguration{}, err
 	}
 
 	remoteID := rpc.GetRemoteID(ctx)
+
+	parsedAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return SwitchConfiguration{}, err
+	}
 
 	r.switchesLock.Lock()
 
 	if _, ok := r.switches[remoteID]; ok {
 		r.switchesLock.Unlock()
 
-		return []byte{}, ErrSwitchAlreadyRegistered
+		return SwitchConfiguration{}, ErrSwitchAlreadyRegistered
 	}
 
 	r.switches[remoteID] = SwitchMetadata{
@@ -640,8 +672,19 @@ func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) 
 	r.switchesLock.Unlock()
 
 	if err := r.updateGraphs(context.Background()); err != nil {
-		return []byte{}, err
+		return SwitchConfiguration{}, err
 	}
 
-	return r.caPEM, nil
+	benchmarkListenCertPEM, benchmarkListenCertPrivKeyPEM, err := utils.GenerateCertificate(r.caCfg, r.caPrivKey, r.callCertValidity, "", parsedAddr.IP.String(), utils.RoleAdapterListener)
+	if err != nil {
+		return SwitchConfiguration{}, err
+	}
+
+	return SwitchConfiguration{
+		CAPEM: r.caPEM,
+		BenchmarkListenCert: CertPair{
+			CertPEM:        benchmarkListenCertPEM,
+			CertPrivKeyPEM: benchmarkListenCertPrivKeyPEM,
+		},
+	}, nil
 }

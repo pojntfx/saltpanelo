@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
 	"errors"
 	"log"
 	"sync"
@@ -10,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
+	"github.com/pojntfx/saltpanelo/pkg/utils"
 )
 
 var (
@@ -53,7 +56,11 @@ type Gateway struct {
 
 	auth *auth.OIDCAuthn
 
-	caPEM []byte
+	caCfg     *x509.Certificate
+	caPEM     []byte
+	caPrivKey *rsa.PrivateKey
+
+	benchmarkClientCertValidity time.Duration
 
 	Router *Router
 
@@ -66,7 +73,11 @@ func NewGateway(
 	oidcIssuer,
 	oidcClientID string,
 
+	caCfg *x509.Certificate,
 	caPEM []byte,
+	caPrivKey *rsa.PrivateKey,
+
+	benchmarkClientCertValidity time.Duration,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
@@ -75,7 +86,11 @@ func NewGateway(
 
 		auth: auth.NewOIDCAuthn(oidcIssuer, oidcClientID),
 
-		caPEM: caPEM,
+		caCfg:     caCfg,
+		caPEM:     caPEM,
+		caPrivKey: caPrivKey,
+
+		benchmarkClientCertValidity: benchmarkClientCertValidity,
 	}
 }
 
@@ -118,7 +133,15 @@ func (g *Gateway) refreshPeerLatency(
 	addrs []string,
 	swIDs []string,
 ) error {
-	rawLatencies, err := remote.TestLatency(ctx, g.Router.testTimeout, addrs)
+	benchmarkClientCertPEM, benchmarkClientPrivKeyPEM, err := utils.GenerateCertificate(g.caCfg, g.caPrivKey, g.benchmarkClientCertValidity, "", "", utils.RoleBenchmarkClient)
+	if err != nil {
+		return err
+	}
+
+	rawLatencies, err := remote.TestLatency(ctx, g.Router.testTimeout, addrs, CertPair{
+		CertPEM:        benchmarkClientCertPEM,
+		CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
+	})
 	if err != nil {
 		return err
 	}
@@ -128,7 +151,12 @@ func (g *Gateway) refreshPeerLatency(
 		g.Router.testTimeout,
 		addrs,
 		g.Router.throughputLength,
-		g.Router.throughputChunks)
+		g.Router.throughputChunks,
+		CertPair{
+			CertPEM:        benchmarkClientCertPEM,
+			CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
+		},
+	)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"log"
 	"net"
@@ -68,6 +70,8 @@ func main() {
 
 	errs := make(chan error)
 
+	switchConfigChan := make(chan services.SwitchConfiguration)
+
 	l := services.NewSwitch(*verbose, *ahost)
 	clients := 0
 	registry := rpc.NewRegistry(
@@ -96,12 +100,14 @@ func main() {
 								return
 							}
 
-							caPEM, err := peer.RegisterSwitch(ctx, token, *taddr)
+							switchConfig, err := peer.RegisterSwitch(ctx, token, *taddr)
 							if err != nil {
 								log.Fatal("Could not register with router with ID", remoteID, ", stopping:", err)
 							}
 
-							services.SetSwitchCA(l, caPEM)
+							services.SetSwitchCA(l, switchConfig.CAPEM)
+
+							switchConfigChan <- switchConfig
 
 							if *verbose {
 								log.Println("Registered with router with ID", remoteID)
@@ -138,7 +144,32 @@ func main() {
 	}()
 
 	go func() {
-		lis, err := net.Listen("tcp", *laddr)
+		switchConfig := <-switchConfigChan
+
+		cer, err := tls.X509KeyPair(switchConfig.BenchmarkListenCert.CertPEM, switchConfig.BenchmarkListenCert.CertPrivKeyPEM)
+		if err != nil {
+			errs <- err
+
+			return
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(switchConfig.CAPEM)
+
+		lis, err := tls.Listen("tcp", *laddr, &tls.Config{
+			Certificates: []tls.Certificate{cer},
+			ClientCAs:    caCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+				cert := verifiedChains[0][0]
+
+				if cert.Subject.CommonName != utils.RoleBenchmarkClient {
+					return services.ErrUnauthenticatedRole
+				}
+
+				return nil
+			},
+		})
 		if err != nil {
 			errs <- err
 

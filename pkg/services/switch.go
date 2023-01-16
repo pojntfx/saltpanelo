@@ -26,8 +26,8 @@ func SetSwitchCA(sw *Switch, caPEM []byte) {
 }
 
 type SwitchRemote struct {
-	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
-	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
 	GetPublicIP      func(ctx context.Context) (string, error)
 	ProvisionRoute   func(
@@ -71,20 +71,46 @@ func NewSwitch(verbose bool, ahost string) *Switch {
 	}
 }
 
-func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {
+func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error) {
 	if s.verbose {
 		log.Println("Starting latency tests for addrs", addrs)
 	}
 
-	return testLatency(timeout, addrs)
+	cer, err := tls.X509KeyPair(benchmarkClientCert.CertPEM, benchmarkClientCert.CertPrivKeyPEM)
+	if err != nil {
+		return []time.Duration{}, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(s.caPEM)
+
+	return testLatency(timeout, addrs, &tls.Dialer{
+		Config: &tls.Config{
+			RootCAs:      caCertPool,
+			Certificates: []tls.Certificate{cer},
+		},
+	})
 }
 
-func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
+func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error) {
 	if s.verbose {
 		log.Println("Starting throughput tests for addrs", addrs)
 	}
 
-	return testThroughput(timeout, addrs, length, chunks)
+	cer, err := tls.X509KeyPair(benchmarkClientCert.CertPEM, benchmarkClientCert.CertPrivKeyPEM)
+	if err != nil {
+		return []ThroughputResult{}, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(s.caPEM)
+
+	return testThroughput(timeout, addrs, length, chunks, &tls.Dialer{
+		Config: &tls.Config{
+			RootCAs:      caCertPool,
+			Certificates: []tls.Certificate{cer},
+		},
+	})
 }
 
 func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
@@ -397,7 +423,7 @@ func (s *Switch) ProvisionRoute(
 	return addrs, nil
 }
 
-func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error) {
+func testLatency(timeout time.Duration, addrs []string, dialer *tls.Dialer) ([]time.Duration, error) {
 	latencies := []time.Duration{}
 	var latencyLock sync.Mutex
 
@@ -413,7 +439,10 @@ func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error)
 
 			before := time.Now()
 
-			conn, err := net.DialTimeout("tcp", addr, timeout)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			conn, err := dialer.DialContext(ctx, "tcp", addr)
 			if err != nil {
 				errs <- err
 
@@ -445,13 +474,16 @@ func testLatency(timeout time.Duration, addrs []string) ([]time.Duration, error)
 	}
 }
 
-func testThroughput(timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
+func testThroughput(timeout time.Duration, addrs []string, length, chunks int64, dialer *tls.Dialer) ([]ThroughputResult, error) {
 	throughputs := []ThroughputResult{}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	for _, addr := range addrs {
-		conn, err := net.DialTimeout("tcp", addr, timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
 		if err != nil {
 			return []ThroughputResult{}, err
 		}

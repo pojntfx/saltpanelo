@@ -22,8 +22,8 @@ func SetAdapterCA(adapter *Adapter, caPEM []byte) {
 
 type AdapterRemote struct {
 	RequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
-	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error)
-	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error)
+	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
 	ProvisionRoute   func(
 		ctx context.Context,
@@ -115,20 +115,46 @@ func (a *Adapter) requestCall(
 	return false, "", ErrNoPeersFound
 }
 
-func (a *Adapter) TestLatency(ctx context.Context, timeout time.Duration, addrs []string) ([]time.Duration, error) {
+func (a *Adapter) TestLatency(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error) {
 	if a.verbose {
 		log.Println("Starting latency tests for addrs", addrs)
 	}
 
-	return testLatency(timeout, addrs)
+	cer, err := tls.X509KeyPair(benchmarkClientCert.CertPEM, benchmarkClientCert.CertPrivKeyPEM)
+	if err != nil {
+		return []time.Duration{}, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(a.caPEM)
+
+	return testLatency(timeout, addrs, &tls.Dialer{
+		Config: &tls.Config{
+			RootCAs:      caCertPool,
+			Certificates: []tls.Certificate{cer},
+		},
+	})
 }
 
-func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64) ([]ThroughputResult, error) {
+func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error) {
 	if a.verbose {
 		log.Println("Starting throughput tests for addrs", addrs)
 	}
 
-	return testThroughput(timeout, addrs, length, chunks)
+	cer, err := tls.X509KeyPair(benchmarkClientCert.CertPEM, benchmarkClientCert.CertPrivKeyPEM)
+	if err != nil {
+		return []ThroughputResult{}, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(a.caPEM)
+
+	return testThroughput(timeout, addrs, length, chunks, &tls.Dialer{
+		Config: &tls.Config{
+			RootCAs:      caCertPool,
+			Certificates: []tls.Certificate{cer},
+		},
+	})
 }
 
 func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
