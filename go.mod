@@ -13,6 +13,7 @@ require (
 	github.com/pojntfx/dudirekta v0.4.0
 	golang.org/x/exp v0.0.0-20221230185412-738e83a70c30
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+	nhooyr.io/websocket v1.8.7
 )
 
 require (
@@ -20,6 +21,7 @@ require (
 	github.com/dchest/jsmin v0.0.0-20220218165748-59f39799265f // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/josephspurrier/goversioninfo v1.4.0 // indirect
+	github.com/klauspost/compress v1.15.13 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/randall77/makefat v0.0.0-20210315173500-7ddd0e42c844 // indirect
 	github.com/teivah/broadcast v0.1.0 // indirect

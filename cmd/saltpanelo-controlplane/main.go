@@ -10,6 +10,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/services"
 	"github.com/pojntfx/saltpanelo/pkg/utils"
+	"nhooyr.io/websocket"
 )
 
 var (
@@ -300,6 +302,59 @@ regenerate:
 
 		log.Println("Metrics listening on", lis.Addr())
 
+		if err := http.Serve(lis, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if err := recover(); err != nil && !utils.IsClosedErr(err) {
+					w.WriteHeader(http.StatusInternalServerError)
+
+					log.Printf("Client disconnected from metrics with error: %v", err)
+				}
+			}()
+
+			switch r.Method {
+			case http.MethodGet:
+				c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+					OriginPatterns: []string{"*"},
+				})
+				if err != nil {
+					panic(err)
+				}
+
+				pings := time.NewTicker(time.Second / 2)
+				defer pings.Stop()
+
+				httpErrs := make(chan error)
+				go func() {
+					for range pings.C {
+						if err := c.Ping(ctx); err != nil {
+							httpErrs <- err
+
+							return
+						}
+					}
+				}()
+
+				conn := websocket.NetConn(ctx, c, websocket.MessageText)
+				defer conn.Close()
+
+				go func() {
+					if err := metricsRegistry.Link(conn); err != nil {
+						httpErrs <- err
+
+						return
+					}
+				}()
+
+				if err := <-httpErrs; err != nil {
+					panic(err)
+				}
+			default:
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			}
+		})); err != nil {
+			panic(err)
+		}
+
 		for {
 			func() {
 				conn, err := lis.Accept()
@@ -337,29 +392,57 @@ regenerate:
 
 		log.Println("Router listening on", lis.Addr())
 
-		for {
-			func() {
-				conn, err := lis.Accept()
-				if err != nil {
-					log.Println("could not accept router connection, continuing:", err)
+		if err := http.Serve(lis, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if err := recover(); err != nil && !utils.IsClosedErr(err) {
+					w.WriteHeader(http.StatusInternalServerError)
 
-					return
+					log.Printf("Client disconnected from router with error: %v", err)
+				}
+			}()
+
+			switch r.Method {
+			case http.MethodGet:
+				c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+					OriginPatterns: []string{"*"},
+				})
+				if err != nil {
+					panic(err)
 				}
 
+				pings := time.NewTicker(time.Second / 2)
+				defer pings.Stop()
+
+				httpErrs := make(chan error)
 				go func() {
-					defer func() {
-						_ = conn.Close()
+					for range pings.C {
+						if err := c.Ping(ctx); err != nil {
+							httpErrs <- err
 
-						if err := recover(); err != nil && !utils.IsClosedErr(err) {
-							log.Printf("Client disconnected from router with error: %v", err)
+							return
 						}
-					}()
-
-					if err := routerRegistry.Link(conn); err != nil {
-						panic(err)
 					}
 				}()
-			}()
+
+				conn := websocket.NetConn(ctx, c, websocket.MessageText)
+				defer conn.Close()
+
+				go func() {
+					if err := routerRegistry.Link(conn); err != nil {
+						httpErrs <- err
+
+						return
+					}
+				}()
+
+				if err := <-httpErrs; err != nil {
+					panic(err)
+				}
+			default:
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			}
+		})); err != nil {
+			panic(err)
 		}
 	}()
 
@@ -374,29 +457,57 @@ regenerate:
 
 		log.Println("Gateway listening on", lis.Addr())
 
-		for {
-			func() {
-				conn, err := lis.Accept()
-				if err != nil {
-					log.Println("could not accept gateway connection, continuing:", err)
+		if err := http.Serve(lis, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if err := recover(); err != nil && !utils.IsClosedErr(err) {
+					w.WriteHeader(http.StatusInternalServerError)
 
-					return
+					log.Printf("Client disconnected from gateway with error: %v", err)
+				}
+			}()
+
+			switch r.Method {
+			case http.MethodGet:
+				c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+					OriginPatterns: []string{"*"},
+				})
+				if err != nil {
+					panic(err)
 				}
 
+				pings := time.NewTicker(time.Second / 2)
+				defer pings.Stop()
+
+				httpErrs := make(chan error)
 				go func() {
-					defer func() {
-						_ = conn.Close()
+					for range pings.C {
+						if err := c.Ping(ctx); err != nil {
+							httpErrs <- err
 
-						if err := recover(); err != nil && !utils.IsClosedErr(err) {
-							log.Printf("Client disconnected from gateway with error: %v", err)
+							return
 						}
-					}()
-
-					if err := gatewayRegistry.Link(conn); err != nil {
-						panic(err)
 					}
 				}()
-			}()
+
+				conn := websocket.NetConn(ctx, c, websocket.MessageText)
+				defer conn.Close()
+
+				go func() {
+					if err := gatewayRegistry.Link(conn); err != nil {
+						httpErrs <- err
+
+						return
+					}
+				}()
+
+				if err := <-httpErrs; err != nil {
+					panic(err)
+				}
+			default:
+				w.WriteHeader(http.StatusMethodNotAllowed)
+			}
+		})); err != nil {
+			panic(err)
 		}
 	}()
 

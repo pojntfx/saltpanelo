@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net"
 	"os"
 	"strings"
 	"time"
@@ -13,10 +12,11 @@ import (
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/services"
+	"nhooyr.io/websocket"
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1339", "Metric remote address")
+	raddr := flag.String("raddr", "ws://localhost:1339", "Metric remote address")
 	timeout := flag.Duration("timeout", time.Minute, "Time after which to assume that a call has timed out")
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	networkOut := flag.String("network-out", "saltpanelo-network.svg", "Path to write the network graph to")
@@ -106,10 +106,11 @@ func main() {
 	)
 	l.Peers = registry.Peers
 
-	conn, err := net.Dial("tcp", *raddr)
+	rawConn, _, err := websocket.Dial(ctx, *raddr, nil)
 	if err != nil {
 		panic(err)
 	}
+	conn := websocket.NetConn(ctx, rawConn, websocket.MessageText)
 	defer conn.Close()
 
 	log.Println("Connected to", conn.RemoteAddr())

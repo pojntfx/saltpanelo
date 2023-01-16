@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"flag"
 	"log"
-	"net"
 	"strings"
 	"time"
 
@@ -14,10 +13,11 @@ import (
 	"github.com/pojntfx/saltpanelo/pkg/auth"
 	"github.com/pojntfx/saltpanelo/pkg/services"
 	"github.com/pojntfx/saltpanelo/pkg/utils"
+	"nhooyr.io/websocket"
 )
 
 func main() {
-	raddr := flag.String("raddr", "localhost:1337", "Router remote address")
+	raddr := flag.String("raddr", "ws://localhost:1337", "Router remote address")
 	laddr := flag.String("laddr", ":1340", "Listen address for latency and throughput tests")
 	taddr := flag.String("taddr", "127.0.0.1:1340", "Listen address to advertise for latency and throughput tests")
 	ahost := flag.String("ahost", "127.0.0.1", "Host to advertise other switches to dial; leave empty to resolve public IP using STUN")
@@ -126,12 +126,13 @@ func main() {
 	l.Peers = registry.Peers
 
 	go func() {
-		conn, err := net.Dial("tcp", *raddr)
+		rawConn, _, err := websocket.Dial(ctx, *raddr, nil)
 		if err != nil {
 			errs <- err
 
 			return
 		}
+		conn := websocket.NetConn(ctx, rawConn, websocket.MessageText)
 		defer conn.Close()
 
 		log.Println("Connected to", conn.RemoteAddr())
