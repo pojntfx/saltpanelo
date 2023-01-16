@@ -197,7 +197,7 @@ func main() {
 						}
 					}()
 
-					if err := utils.HandleTestConn(*verbose, conn); err != nil {
+					if err := utils.HandleTestConn(*verbose, conn, switchConfig.BenchmarkLimit); err != nil {
 						panic(err)
 					}
 				}()

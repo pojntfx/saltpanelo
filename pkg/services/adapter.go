@@ -23,7 +23,7 @@ func SetAdapterCA(adapter *Adapter, caPEM []byte) {
 type AdapterRemote struct {
 	RequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error)
-	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair, benchmarkLimit int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
 	ProvisionRoute   func(
 		ctx context.Context,
@@ -136,7 +136,7 @@ func (a *Adapter) TestLatency(ctx context.Context, timeout time.Duration, addrs 
 	})
 }
 
-func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error) {
+func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair, benchmarkLimit int64) ([]ThroughputResult, error) {
 	if a.verbose {
 		log.Println("Starting throughput tests for addrs", addrs)
 	}
@@ -149,12 +149,12 @@ func (a *Adapter) TestThroughput(ctx context.Context, timeout time.Duration, add
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(a.caPEM)
 
-	return testThroughput(timeout, addrs, length, chunks, &tls.Dialer{
+	return testThroughput(timeout, addrs, &tls.Dialer{
 		Config: &tls.Config{
 			RootCAs:      caCertPool,
 			Certificates: []tls.Certificate{cer},
 		},
-	})
+	}, benchmarkLimit)
 }
 
 func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {

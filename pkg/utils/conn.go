@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func HandleTestConn(verbose bool, conn net.Conn) error {
+func HandleTestConn(verbose bool, conn net.Conn, benchmarkLimit int64) error {
 	if verbose {
 		log.Println("Handling throughput or latency test")
 	}
@@ -18,7 +18,7 @@ func HandleTestConn(verbose bool, conn net.Conn) error {
 	errs := make(chan error)
 
 	go func() {
-		if _, err := io.Copy(conn, r); err != nil {
+		if _, err := io.CopyN(conn, r, benchmarkLimit); err != nil {
 			errs <- err
 
 			return
@@ -26,7 +26,7 @@ func HandleTestConn(verbose bool, conn net.Conn) error {
 	}()
 
 	go func() {
-		if _, err := io.Copy(io.Discard, conn); err != nil {
+		if _, err := io.CopyN(io.Discard, conn, benchmarkLimit); err != nil {
 			errs <- err
 
 			return

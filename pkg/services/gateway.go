@@ -64,6 +64,8 @@ type Gateway struct {
 
 	rsaBits int
 
+	benchmarkLimit int64
+
 	Router *Router
 
 	Peers func() map[string]AdapterRemote
@@ -82,6 +84,8 @@ func NewGateway(
 	benchmarkClientCertValidity time.Duration,
 
 	rsaBits int,
+
+	benchmarkLimit int64,
 ) *Gateway {
 	return &Gateway{
 		verbose: verbose,
@@ -156,12 +160,11 @@ func (g *Gateway) refreshPeerLatency(
 		ctx,
 		g.Router.testTimeout,
 		addrs,
-		g.Router.throughputLength,
-		g.Router.throughputChunks,
 		CertPair{
 			CertPEM:        benchmarkClientCertPEM,
 			CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
 		},
+		g.benchmarkLimit,
 	)
 	if err != nil {
 		return err

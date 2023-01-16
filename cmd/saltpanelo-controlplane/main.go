@@ -39,8 +39,6 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Whether to enable verbose logging")
 	testInterval := flag.Duration("test-interval", time.Second*10, "Interval in which to refresh latency values in topology")
 	testTimeout := flag.Duration("test-timeout", time.Second*5, "Dial timeout after which to assume a switch is unreachable from another switch")
-	throughputLength := flag.Int64("throughput-length", 1048576, "Length of a single chunk to send for the latency test")
-	throughputChunks := flag.Int64("throughput-chunks", 100, "Amount of chunks to send for the latency test")
 	caValidity := flag.Duration("ca-validity", time.Hour*24*30*365, "Time until generated CA certificate becomes invalid")
 	callCertValidity := flag.Duration("call-cert-validity", time.Hour, "Time until generated certificates for calls become invalid")
 	rsaBits := flag.Int("rsa-bits", 2048, "RSA bits to use when generating mTLS private keys")
@@ -52,6 +50,7 @@ func main() {
 	routerOIDCClientID := flag.String("router-oidc-client-id", "", "Router OIDC client ID")
 	routerOIDCAudience := flag.String("router-oidc-audience", "", "Router OIDC audience (e.g. https://saltpanelo-router)")
 	metricsAuthorizedEmail := flag.String("metrics-authorized-email", "", "Authorized email for metrics (e.g. jean.doe@example.com)")
+	benchmarkLimit := flag.Int64("benchmark-length", 1048576*100, "Amount of bytes to stream to benchmark clients before closing connection")
 
 	flag.Parse()
 
@@ -162,9 +161,6 @@ regenerate:
 		*testInterval,
 		*testTimeout,
 
-		*throughputLength,
-		*throughputChunks,
-
 		*routerOIDCIssuer,
 		*routerOIDCClientID,
 		*routerOIDCAudience,
@@ -178,6 +174,7 @@ regenerate:
 		*benchmarkClientCertValidity,
 
 		*rsaBits,
+		*benchmarkLimit,
 	)
 	gateway := services.NewGateway(
 		*verbose,
@@ -192,6 +189,7 @@ regenerate:
 		*benchmarkClientCertValidity,
 
 		*rsaBits,
+		*benchmarkLimit,
 	)
 
 	if err := metrics.Open(ctx); err != nil {

@@ -27,7 +27,7 @@ func SetSwitchCA(sw *Switch, caPEM []byte) {
 
 type SwitchRemote struct {
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error)
-	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error)
+	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair, benchmarkLimit int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
 	GetPublicIP      func(ctx context.Context) (string, error)
 	ProvisionRoute   func(
@@ -92,7 +92,7 @@ func (s *Switch) TestLatency(ctx context.Context, timeout time.Duration, addrs [
 	})
 }
 
-func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, length, chunks int64, benchmarkClientCert CertPair) ([]ThroughputResult, error) {
+func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair, benchmarkLimit int64) ([]ThroughputResult, error) {
 	if s.verbose {
 		log.Println("Starting throughput tests for addrs", addrs)
 	}
@@ -105,12 +105,12 @@ func (s *Switch) TestThroughput(ctx context.Context, timeout time.Duration, addr
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(s.caPEM)
 
-	return testThroughput(timeout, addrs, length, chunks, &tls.Dialer{
+	return testThroughput(timeout, addrs, &tls.Dialer{
 		Config: &tls.Config{
 			RootCAs:      caCertPool,
 			Certificates: []tls.Certificate{cer},
 		},
-	})
+	}, benchmarkLimit)
 }
 
 func (s *Switch) UnprovisionRoute(ctx context.Context, routeID string) error {
@@ -474,7 +474,7 @@ func testLatency(timeout time.Duration, addrs []string, dialer *tls.Dialer) ([]t
 	}
 }
 
-func testThroughput(timeout time.Duration, addrs []string, length, chunks int64, dialer *tls.Dialer) ([]ThroughputResult, error) {
+func testThroughput(timeout time.Duration, addrs []string, dialer *tls.Dialer, benchmarkLimit int64) ([]ThroughputResult, error) {
 	throughputs := []ThroughputResult{}
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -493,12 +493,10 @@ func testThroughput(timeout time.Duration, addrs []string, length, chunks int64,
 		{
 			before := time.Now()
 
-			for i := int64(0); i < chunks; i++ {
-				if _, err := io.CopyN(conn, r, length); err != nil {
-					_ = conn.Close()
+			if _, err := io.CopyN(conn, r, benchmarkLimit); err != nil {
+				_ = conn.Close()
 
-					return []ThroughputResult{}, err
-				}
+				return []ThroughputResult{}, err
 			}
 
 			throughput.Write = time.Since(before)
@@ -507,12 +505,10 @@ func testThroughput(timeout time.Duration, addrs []string, length, chunks int64,
 		{
 			before := time.Now()
 
-			for i := int64(0); i < chunks; i++ {
-				if _, err := io.CopyN(io.Discard, conn, length); err != nil {
-					_ = conn.Close()
+			if _, err := io.CopyN(io.Discard, conn, benchmarkLimit); err != nil {
+				_ = conn.Close()
 
-					return []ThroughputResult{}, err
-				}
+				return []ThroughputResult{}, err
 			}
 
 			throughput.Read = time.Since(before)

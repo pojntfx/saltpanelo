@@ -59,6 +59,7 @@ type CertPair struct {
 type SwitchConfiguration struct {
 	CAPEM               []byte
 	BenchmarkListenCert CertPair
+	BenchmarkLimit      int64
 }
 
 type Router struct {
@@ -67,9 +68,6 @@ type Router struct {
 
 	testInterval time.Duration
 	testTimeout  time.Duration
-
-	throughputLength int64
-	throughputChunks int64
 
 	Metrics *Metrics
 	Gateway *Gateway
@@ -94,6 +92,8 @@ type Router struct {
 
 	rsaBits int
 
+	benchmarkLimit int64
+
 	Peers func() map[string]SwitchRemote
 }
 
@@ -102,9 +102,6 @@ func NewRouter(
 
 	testInterval time.Duration,
 	testTimeout time.Duration,
-
-	throughputLength int64,
-	throughputChunks int64,
 
 	oidcIssuer,
 	oidcClientID,
@@ -119,15 +116,15 @@ func NewRouter(
 	benchmarkClientCertValidity time.Duration,
 
 	rsaBits int,
+
+	benchmarkLimit int64,
 ) *Router {
 	return &Router{
 		switches: map[string]SwitchMetadata{},
 
-		testInterval: testInterval,
-		testTimeout:  testTimeout,
-
-		throughputLength: throughputLength,
-		throughputChunks: throughputChunks,
+		testInterval:   testInterval,
+		testTimeout:    testTimeout,
+		benchmarkLimit: benchmarkLimit,
 
 		graph: graph.New(graph.StringHash, graph.Directed(), graph.Weighted()),
 
@@ -299,10 +296,10 @@ func (r *Router) onOpen() {
 					return
 				}
 
-				testResults, err := peer.TestThroughput(nil, r.testTimeout, addrs, r.throughputLength, r.throughputChunks, CertPair{
+				testResults, err := peer.TestThroughput(nil, r.testTimeout, addrs, CertPair{
 					CertPEM:        benchmarkClientCertPEM,
 					CertPrivKeyPEM: benchmarkClientPrivKeyPEM,
-				})
+				}, r.benchmarkLimit)
 				if err != nil {
 					log.Println("Could not run throughput test for switch with ID", remoteID, ", continuing:", err)
 
@@ -692,5 +689,6 @@ func (r *Router) RegisterSwitch(ctx context.Context, token string, addr string) 
 			CertPEM:        benchmarkListenCertPEM,
 			CertPrivKeyPEM: benchmarkListenCertPrivKeyPEM,
 		},
+		BenchmarkLimit: r.benchmarkLimit,
 	}, nil
 }
