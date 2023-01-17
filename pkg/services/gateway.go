@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,9 +24,10 @@ var (
 )
 
 type GatewayRemote struct {
-	RegisterAdapter func(ctx context.Context, token string) ([]byte, error)
-	RequestCall     func(ctx context.Context, token string, dstID, channelID string) (RequestCallResult, error)
-	HangupCall      func(ctx context.Context, token string, routeID string) error
+	RegisterAdapter  func(ctx context.Context, token string) ([]byte, error)
+	RequestCall      func(ctx context.Context, token string, dstID, channelID string) (RequestCallResult, error)
+	HangupCall       func(ctx context.Context, token string, routeID string) error
+	ResolveEmailToID func(ctx context.Context, token string, email string) (string, error)
 }
 
 type RequestCallResult struct {
@@ -46,6 +48,7 @@ func HandleGatewayClientDisconnect(r *Router, g *Gateway, remoteID string) error
 type AdapterMetadata struct {
 	Latencies   map[string]time.Duration
 	Throughputs map[string]ThroughputResult
+	UserEmail   string
 }
 
 type Gateway struct {
@@ -212,7 +215,8 @@ func (g *Gateway) refreshPeerLatency(
 }
 
 func (g *Gateway) RegisterAdapter(ctx context.Context, token string) ([]byte, error) {
-	if _, err := g.auth.Validate(token); err != nil {
+	email, err := g.auth.Validate(token)
+	if err != nil {
 		return []byte{}, err
 	}
 
@@ -229,6 +233,7 @@ func (g *Gateway) RegisterAdapter(ctx context.Context, token string) ([]byte, er
 	g.adapters[remoteID] = AdapterMetadata{
 		map[string]time.Duration{},
 		map[string]ThroughputResult{},
+		email,
 	}
 
 	if g.verbose {
@@ -256,6 +261,13 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID, channelI
 
 	if g.verbose {
 		log.Println("Remote with ID", remoteID, "is requesting a call with ID", dstID, "with route ID", routeID, "and channel ID", channelID)
+	}
+
+	sm, ok := g.adapters[remoteID]
+	if !ok {
+		g.adaptersLock.Unlock()
+
+		return RequestCallResult{}, ErrAdapterNotFound
 	}
 
 	if _, ok := g.adapters[dstID]; !ok {
@@ -297,6 +309,7 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID, channelI
 	accept, err := dst.RequestCall(
 		ctx,
 		remoteID,
+		sm.UserEmail,
 		routeID,
 		channelID,
 	)
@@ -421,4 +434,32 @@ func (g *Gateway) HangupCall(ctx context.Context, token string, routeID string) 
 	}
 
 	return nil
+}
+
+func (g *Gateway) ResolveEmailToID(ctx context.Context, token string, email string) (string, error) {
+	if _, err := g.auth.Validate(token); err != nil {
+		return "", err
+	}
+
+	if g.verbose {
+		log.Println("Looking up ID for email", email)
+	}
+
+	g.adaptersLock.Lock()
+	defer g.adaptersLock.Unlock()
+
+	id := ""
+	for candidateID, sm := range g.adapters {
+		if sm.UserEmail == email {
+			id = candidateID
+
+			break
+		}
+	}
+
+	if strings.TrimSpace(id) == "" {
+		return "", ErrAdapterNotFound
+	}
+
+	return id, nil
 }

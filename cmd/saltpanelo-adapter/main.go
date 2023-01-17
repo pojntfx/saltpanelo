@@ -71,9 +71,9 @@ func main() {
 	l = services.NewAdapter(
 		*verbose,
 		*ahost,
-		func(ctx context.Context, srcID, routeID, channelID string) (bool, error) {
+		func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
 			if err := zenity.Question(
-				fmt.Sprintf("Incoming call from remote with with ID %v, route ID %v and channel ID %v, do you want to answer it?", srcID, routeID, channelID),
+				fmt.Sprintf("Incoming call from remote with with ID %v, email %v, route ID %v and channel ID %v, do you want to answer it?", srcID, srcEmail, routeID, channelID),
 				zenity.Title("Incoming Call"),
 				zenity.QuestionIcon,
 				zenity.OKLabel("Answer"),
@@ -212,14 +212,14 @@ func main() {
 
 	go func() {
 		for {
-			dstID, err := zenity.Entry("Peer ID to call", zenity.Title("Dialer"))
+			email, err := zenity.Entry("Email to call", zenity.Title("Dialer"))
 			if err != nil {
 				errs <- err
 
 				return
 			}
 
-			channelID, err := zenity.Entry("Channel ID to call", zenity.Title("Dialer"))
+			token, err := tm.GetIDToken()
 			if err != nil {
 				errs <- err
 
@@ -227,7 +227,14 @@ func main() {
 			}
 
 			for _, peer := range l.Peers() {
-				token, err := tm.GetIDToken()
+				dstID, err := peer.ResolveEmailToID(ctx, token, email)
+				if err != nil {
+					errs <- err
+
+					return
+				}
+
+				channelID, err := zenity.Entry("Channel ID to call", zenity.Title("Dialer"))
 				if err != nil {
 					errs <- err
 

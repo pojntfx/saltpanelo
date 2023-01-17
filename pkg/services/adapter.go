@@ -21,7 +21,7 @@ func SetAdapterCA(adapter *Adapter, caPEM []byte) {
 }
 
 type AdapterRemote struct {
-	RequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
+	RequestCall      func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error)
 	TestLatency      func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair) ([]time.Duration, error)
 	TestThroughput   func(ctx context.Context, timeout time.Duration, addrs []string, benchmarkClientCert CertPair, benchmarkLimit int64) ([]ThroughputResult, error)
 	UnprovisionRoute func(ctx context.Context, routeID string) error
@@ -41,7 +41,7 @@ type Adapter struct {
 	verbose bool
 	ahost   string
 
-	onRequestCall      func(ctx context.Context, srcID, routeID, channelID string) (bool, error)
+	onRequestCall      func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error)
 	onCallDisconnected func(ctx context.Context, routeID string) error
 	onHandleCall       func(ctx context.Context, routeID, raddr string) error
 	getIDToken         func() (string, error)
@@ -58,7 +58,7 @@ func NewAdapter(
 	verbose bool,
 	ahost string,
 
-	onRequestCall func(ctx context.Context, srcID, routeID, channelID string) (bool, error),
+	onRequestCall func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error),
 	onCallDisconnected func(ctx context.Context, routeID string) error,
 	onHandleCall func(ctx context.Context, routeID, raddr string) error,
 	getIDToken func() (string, error),
@@ -79,6 +79,7 @@ func NewAdapter(
 func (a *Adapter) RequestCall(
 	ctx context.Context,
 	srcID,
+	srcEmail,
 	routeID,
 	channelID string,
 ) (bool, error) {
@@ -86,7 +87,7 @@ func (a *Adapter) RequestCall(
 		log.Println("Remote with ID", srcID, "is requesting a call")
 	}
 
-	return a.onRequestCall(ctx, srcID, routeID, channelID)
+	return a.onRequestCall(ctx, srcID, srcEmail, routeID, channelID)
 }
 
 func (a *Adapter) requestCall(
