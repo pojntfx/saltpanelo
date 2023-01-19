@@ -1,4 +1,4 @@
-package bindings
+package main
 
 import (
 	"C"
@@ -6,10 +6,11 @@ import (
 	"context"
 	"unsafe"
 
+	"errors"
+
 	"github.com/mattn/go-pointer"
 	"github.com/pojntfx/saltpanelo/internal/backends"
 )
-import "errors"
 
 type CString = *C.char
 type CError = *C.char
@@ -17,12 +18,18 @@ type CBool = C.char
 type CInt = C.int
 
 const (
-	CBoolFalse = 0
 	CBoolTrue  = 1
+	CBoolFalse = 0
 )
 
-func NewAdapter(
-	onRequestCall func(srcID, srcEmail, routeID, channelID CString) (CBool, CError),
+type SaltpaneloOnRequestCallResponse struct {
+	Accept CBool
+	Err    CError
+}
+
+//export SaltpaneloNewAdapter
+func SaltpaneloNewAdapter(
+	onRequestCall func(srcID, srcEmail, routeID, channelID CString) SaltpaneloOnRequestCallResponse,
 	onCallDisconnected func(routeID CString) CError,
 	onHandleCall func(routeID, raddr CString) CError,
 	openURL func(url CString) CError,
@@ -34,19 +41,19 @@ func NewAdapter(
 
 	oidcIssuer,
 	oidcClientID,
-	oidcRedirectURL string,
+	oidcRedirectURL CString,
 ) unsafe.Pointer {
 	return pointer.Save(
 		backends.NewAdapter(
 			func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
-				accept, e := onRequestCall(C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID))
+				rv := onRequestCall(C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID))
 
-				err := C.GoString(e)
+				err := C.GoString(rv.Err)
 				if err == "" {
-					return accept == CBoolTrue, nil
+					return rv.Accept == CBoolTrue, nil
 				}
 
-				return accept == CBoolTrue, errors.New(err)
+				return rv.Accept == CBoolTrue, errors.New(err)
 			},
 			func(ctx context.Context, routeID string) error {
 				err := C.GoString(onCallDisconnected(C.CString(routeID)))
@@ -78,13 +85,14 @@ func NewAdapter(
 			verbose == CBoolTrue,
 			int(timeout),
 
-			oidcIssuer,
-			oidcClientID,
-			oidcRedirectURL,
+			C.GoString(oidcIssuer),
+			C.GoString(oidcClientID),
+			C.GoString(oidcRedirectURL),
 		),
 	)
 }
 
+//export SaltpaneloAdapterLogin
 func SaltpaneloAdapterLogin(adapter unsafe.Pointer) CError {
 	err := (pointer.Restore(adapter)).(*backends.Adapter).Login()
 	if err != nil {
@@ -94,6 +102,7 @@ func SaltpaneloAdapterLogin(adapter unsafe.Pointer) CError {
 	return C.CString("")
 }
 
+//export SaltpaneloAdapterLink
 func SaltpaneloAdapterLink(adapter unsafe.Pointer) CError {
 	err := (pointer.Restore(adapter)).(*backends.Adapter).Link()
 	if err != nil {
@@ -103,6 +112,7 @@ func SaltpaneloAdapterLink(adapter unsafe.Pointer) CError {
 	return C.CString("")
 }
 
+//export SaltpaneloAdapterRequestCall
 func SaltpaneloAdapterRequestCall(adapter unsafe.Pointer, email, channelID CString) (CBool, CError) {
 	accept, err := (pointer.Restore(adapter)).(*backends.Adapter).RequestCall(C.GoString(email), C.GoString(channelID))
 	if err != nil {
@@ -115,3 +125,5 @@ func SaltpaneloAdapterRequestCall(adapter unsafe.Pointer, email, channelID CStri
 
 	return CBoolFalse, C.CString("")
 }
+
+func main() {}
