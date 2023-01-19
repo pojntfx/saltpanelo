@@ -8,6 +8,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.2.0
 	github.com/dominikbraun/graph v0.15.0
 	github.com/google/uuid v1.3.0
+	github.com/mattn/go-pointer v0.0.1
 	github.com/ncruces/zenity v0.10.5
 	github.com/pion/stun v0.3.5
 	github.com/pojntfx/dudirekta v0.4.0
