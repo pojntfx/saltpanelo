@@ -1,8 +1,11 @@
 package main
 
-import (
-	"C"
+/*
+#include "adapter.h"
+*/
+import "C"
 
+import (
 	"context"
 	"unsafe"
 
@@ -22,14 +25,9 @@ const (
 	CBoolFalse = 0
 )
 
-type SaltpaneloOnRequestCallResponse struct {
-	Accept CBool
-	Err    CError
-}
-
 //export SaltpaneloNewAdapter
 func SaltpaneloNewAdapter(
-	onRequestCall func(srcID, srcEmail, routeID, channelID CString) SaltpaneloOnRequestCallResponse,
+	onRequestCall C.on_request_call,
 	onCallDisconnected func(routeID CString) CError,
 	onHandleCall func(routeID, raddr CString) CError,
 	openURL func(url CString) CError,
@@ -46,7 +44,7 @@ func SaltpaneloNewAdapter(
 	return pointer.Save(
 		backends.NewAdapter(
 			func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
-				rv := onRequestCall(C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID))
+				rv := C.bridge_on_request_call(onRequestCall, C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID))
 
 				err := C.GoString(rv.Err)
 				if err == "" {

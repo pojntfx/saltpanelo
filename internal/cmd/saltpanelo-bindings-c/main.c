@@ -16,11 +16,22 @@ void *handle_adapter_link(void *adapter) {
   return NULL;
 }
 
+struct SaltpaneloOnRequestCallResponse handle_on_request_call(char *src_id,
+                                                       char *src_email,
+                                                       char *route_id,
+                                                       char *channel_id) {
+  printf("Called on_request_call");
+
+  struct SaltpaneloOnRequestCallResponse rv = {.Accept = true, .Err = ""};
+
+  return rv;
+}
+
 int main() {
   void *adapter = SaltpaneloNewAdapter(
-      NULL, NULL, NULL, NULL, "ws://localhost:1338", "127.0.0.1", false, 10000,
-      "https://pojntfx.eu.auth0.com/", "dIFKbQTQhqAWd3AKmeAwXt87tIL6bkcv",
-      "http://localhost:11337");
+      &handle_on_request_call, NULL, NULL, NULL, "ws://localhost:1338", "127.0.0.1",
+      false, 10000, "https://pojntfx.eu.auth0.com/",
+      "dIFKbQTQhqAWd3AKmeAwXt87tIL6bkcv", "http://localhost:11337");
 
   char *rv = SaltpaneloAdapterLogin(adapter);
   if (strcmp(rv, "") != 0) {
@@ -58,6 +69,12 @@ int main() {
 
     struct SaltpaneloAdapterRequestCall_return rv =
         SaltpaneloAdapterRequestCall(adapter, email, channel_id);
+    if (strcmp(rv.r1, "") != 0) {
+      fprintf(stderr, "Error in SaltpaneloAdapterRequestCall: %s\n", rv.r1);
+
+      return 1;
+    }
+
     if (rv.r0 == 1) {
       printf("Callee accepted the call\n");
     } else {
