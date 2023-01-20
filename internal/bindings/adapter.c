@@ -11,3 +11,10 @@ void bridge_on_call_disconnected(on_call_disconnected f, char *route_id,
                                  char **rv) {
   f(route_id, rv);
 }
+
+void bridge_on_handle_call(on_handle_call f, char *route_id, char *raddr,
+                           char **rv) {
+  f(route_id, raddr, rv);
+}
+
+void bridge_open_url(open_url f, char *url, char **rv) { f(url, rv); }

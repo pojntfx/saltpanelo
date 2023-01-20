@@ -29,8 +29,8 @@ const (
 func SaltpaneloNewAdapter(
 	onRequestCall C.on_request_call,
 	onCallDisconnected C.on_call_disconnected,
-	onHandleCall func(routeID, raddr CString) CError,
-	openURL func(url CString) CError,
+	onHandleCall C.on_handle_call,
+	openURL C.open_url,
 
 	raddr,
 	ahost CString,
@@ -68,7 +68,11 @@ func SaltpaneloNewAdapter(
 				return errors.New(err)
 			},
 			func(ctx context.Context, routeID, raddr string) error {
-				err := C.GoString(onHandleCall(C.CString(routeID), C.CString(raddr)))
+				rv := C.CString("")
+
+				C.bridge_on_handle_call(onHandleCall, C.CString(routeID), C.CString(raddr), &rv)
+
+				err := C.GoString(rv)
 				if err == "" {
 					return nil
 				}
@@ -76,7 +80,11 @@ func SaltpaneloNewAdapter(
 				return errors.New(err)
 			},
 			func(url string) error {
-				err := C.GoString(openURL(C.CString(url)))
+				rv := C.CString("")
+
+				C.bridge_open_url(openURL, C.CString(url), &rv)
+
+				err := C.GoString(rv)
 				if err == "" {
 					return nil
 				}
