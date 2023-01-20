@@ -30,6 +30,10 @@ void on_request_call_handler(void *ptr, struct vacall_alist *alist) {
   struct SaltpaneloOnRequestCallResponse *rv =
       va_arg_ptr(alist, struct SaltpaneloOnRequestCallResponse *);
 
+  printf("Call with src ID %s, src email %s, route ID %s and channel ID %s "
+         "requested and accepted\n",
+         src_id, src_email, route_id, channel_id);
+
   rv->Accept = true;
   rv->Err = "";
 }
@@ -39,6 +43,8 @@ void on_call_disconnected_handler(void *ptr, struct vacall_alist *alist) {
 
   char *route_id = va_arg_ptr(alist, char *);
   char **rv = va_arg_ptr(alist, char **);
+
+  printf("Call with route ID %s disconnected\n", route_id);
 
   *rv = "";
 }
@@ -50,6 +56,9 @@ void on_handle_call_handler(void *ptr, struct vacall_alist *alist) {
   char *raddr = va_arg_ptr(alist, char *);
   char **rv = va_arg_ptr(alist, char **);
 
+  printf("Call with route ID %s and remote address %s started\n", route_id,
+         raddr);
+
   *rv = "";
 }
 
@@ -58,6 +67,8 @@ void open_url_handler(void *ptr, struct vacall_alist *alist) {
 
   char *url = va_arg_ptr(alist, char *);
   char **rv = va_arg_ptr(alist, char **);
+
+  printf("Open the following URL in your browser: %s\n", url);
 
   *rv = "";
 }

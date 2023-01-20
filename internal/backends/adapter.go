@@ -2,7 +2,6 @@ package backends
 
 import (
 	"context"
-	"log"
 )
 
 type Adapter struct {
@@ -54,30 +53,6 @@ func NewAdapter(
 }
 
 func (a *Adapter) Login() error {
-	log.Println("Testing onRequestCall ...")
-
-	accept, err := a.onRequestCall(context.Background(), "srcIDTest", "srcEmailTest", "routeIDTest", "channelIDTest")
-
-	log.Println("Received for onRequestCall:", accept, err)
-
-	log.Println("Testing onCallDisconnected ...")
-
-	err = a.onCallDisconnected(context.Background(), "routeIDTest")
-
-	log.Println("Received for onCallDisconnected:", err)
-
-	log.Println("Testing onHandleCall ...")
-
-	err = a.onHandleCall(context.Background(), "routeIDTest", "raddrTest")
-
-	log.Println("Received for onHandleCall:", err)
-
-	log.Println("Testing openURL ...")
-
-	err = a.openURL("urlTest")
-
-	log.Println("Received for openURL:", err)
-
 	return nil
 }
 
