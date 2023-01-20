@@ -121,11 +121,7 @@ func (t *TokenManagerAuthorizationCode) InitialLogin() error {
 		return err
 	}
 
-	for err := range errs {
-		return err
-	}
-
-	return nil
+	return <-errs
 }
 
 func (t *TokenManagerAuthorizationCode) GetIDToken() (string, error) {

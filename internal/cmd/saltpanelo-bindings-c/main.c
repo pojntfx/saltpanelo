@@ -88,7 +88,7 @@ int main() {
       handle_on_request_call, handle_on_call_disconnected,
       handle_on_handle_call, handle_open_url, "ws://localhost:1338",
       "127.0.0.1", false, 10000, "https://pojntfx.eu.auth0.com/",
-      "dIFKbQTQhqAWd3AKmeAwXt87tIL6bkcv", "http://localhost:11337");
+      "An94hvwzqxMmFcL8iEpTVrd88zFdhVdl", "http://localhost:11337");
 
   char *rv = SaltpaneloAdapterLogin(adapter);
   if (strcmp(rv, "") != 0) {
@@ -105,12 +105,6 @@ int main() {
     return 1;
   }
 
-  if (pthread_join(adapter_linker, NULL) != 0) {
-    perror("Error in pthread_join");
-
-    return 1;
-  }
-
   while (1) {
     printf("Email to call: ");
 
@@ -118,11 +112,15 @@ int main() {
     size_t email_len = 0;
     getline(&email, &email_len, stdin);
 
+    email[strcspn(email, "\n")] = 0;
+
     printf("Channel ID to call: ");
 
     char *channel_id = NULL;
     size_t channel_id_len = 0;
     getline(&channel_id, &channel_id_len, stdin);
+
+    channel_id[strcspn(channel_id, "\n")] = 0;
 
     struct SaltpaneloAdapterRequestCall_return rv =
         SaltpaneloAdapterRequestCall(adapter, email, channel_id);
@@ -137,6 +135,12 @@ int main() {
     } else {
       printf("Callee denied the call\n");
     }
+  }
+
+  if (pthread_join(adapter_linker, NULL) != 0) {
+    perror("Error in pthread_join");
+
+    return 1;
   }
 
   return 0;

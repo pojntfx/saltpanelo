@@ -43,6 +43,8 @@ func SaltpaneloNewAdapter(
 ) unsafe.Pointer {
 	return pointer.Save(
 		backends.NewAdapter(
+			context.Background(),
+
 			func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
 				rv := C.struct_SaltpaneloOnRequestCallResponse{}
 

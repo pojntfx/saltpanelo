@@ -24,6 +24,8 @@ func main() {
 	flag.Parse()
 
 	adapter := backends.NewAdapter(
+		context.Background(),
+
 		func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
 			log.Printf("Call with src ID %v, src email %v, route ID %v and channel ID %v requested and accepted", srcID, srcEmail, routeID, channelID)
 
@@ -65,19 +67,27 @@ func main() {
 		}
 	}()
 
-	r := bufio.NewReader(os.Stdin)
+	s := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("Email to call: ")
 
-		email, err := r.ReadString('\n')
-		if err != nil {
+		if ok := s.Scan(); !ok {
+			return
+		}
+
+		email := s.Text()
+		if err := s.Err(); err != nil {
 			panic(err)
 		}
 
 		fmt.Print("Channel ID to call: ")
 
-		channelID, err := r.ReadString('\n')
-		if err != nil {
+		if ok := s.Scan(); !ok {
+			return
+		}
+
+		channelID := s.Text()
+		if err := s.Err(); err != nil {
 			panic(err)
 		}
 
