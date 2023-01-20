@@ -44,7 +44,9 @@ func SaltpaneloNewAdapter(
 	return pointer.Save(
 		backends.NewAdapter(
 			func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
-				rv := C.bridge_on_request_call(onRequestCall, C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID))
+				rv := C.struct_SaltpaneloOnRequestCallResponse{}
+
+				C.bridge_on_request_call(onRequestCall, C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID), &rv)
 
 				err := C.GoString(rv.Err)
 				if err == "" {

@@ -1,4 +1,5 @@
 #include "libsaltpanelo.h"
+#include <callback.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -16,21 +17,32 @@ void *handle_adapter_link(void *adapter) {
   return NULL;
 }
 
-struct SaltpaneloOnRequestCallResponse handle_on_request_call(char *src_id,
-                                                       char *src_email,
-                                                       char *route_id,
-                                                       char *channel_id) {
-  printf("Called on_request_call");
+struct example_external_data {};
 
-  struct SaltpaneloOnRequestCallResponse rv = {.Accept = true, .Err = ""};
+void on_request_call_handler(void *ptr, struct vacall_alist *alist) {
+  struct example_external_data *example_data = ptr;
 
-  return rv;
+  char *src_id = va_arg_struct(alist, char *);
+  char *src_email = va_arg_struct(alist, char *);
+  char *route_id = va_arg_struct(alist, char *);
+  char *channel_id = va_arg_struct(alist, char *);
+
+  struct SaltpaneloOnRequestCallResponse *rv =
+      va_arg_ptr(alist, struct SaltpaneloOnRequestCallResponse *);
+
+  rv->Accept = true;
+  rv->Err = "";
 }
 
 int main() {
+  struct example_external_data example_data = {};
+
+  void *handle_on_request_call =
+      alloc_callback(&on_request_call_handler, &example_data);
+
   void *adapter = SaltpaneloNewAdapter(
-      &handle_on_request_call, NULL, NULL, NULL, "ws://localhost:1338", "127.0.0.1",
-      false, 10000, "https://pojntfx.eu.auth0.com/",
+      handle_on_request_call, NULL, NULL, NULL, "ws://localhost:1338",
+      "127.0.0.1", false, 10000, "https://pojntfx.eu.auth0.com/",
       "dIFKbQTQhqAWd3AKmeAwXt87tIL6bkcv", "http://localhost:11337");
 
   char *rv = SaltpaneloAdapterLogin(adapter);
