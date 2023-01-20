@@ -28,7 +28,7 @@ const (
 //export SaltpaneloNewAdapter
 func SaltpaneloNewAdapter(
 	onRequestCall C.on_request_call,
-	onCallDisconnected func(routeID CString) CError,
+	onCallDisconnected C.on_call_disconnected,
 	onHandleCall func(routeID, raddr CString) CError,
 	openURL func(url CString) CError,
 
@@ -56,7 +56,11 @@ func SaltpaneloNewAdapter(
 				return rv.Accept == CBoolTrue, errors.New(err)
 			},
 			func(ctx context.Context, routeID string) error {
-				err := C.GoString(onCallDisconnected(C.CString(routeID)))
+				rv := C.CString("")
+
+				C.bridge_on_call_disconnected(onCallDisconnected, C.CString(routeID), &rv)
+
+				err := C.GoString(rv)
 				if err == "" {
 					return nil
 				}
