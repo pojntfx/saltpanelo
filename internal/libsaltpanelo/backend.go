@@ -1,4 +1,4 @@
-package backends
+package main
 
 import (
 	"context"
@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	ErrNotReady         = errors.New("adapter not ready")
-	ErrNoPeersConnected = errors.New("no peers connected")
+	errNotReady         = errors.New("adapter not ready")
+	errNoPeersConnected = errors.New("no peers connected")
 )
 
-type Adapter struct {
+type adapter struct {
 	ctx context.Context
 
 	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error)
@@ -40,7 +40,7 @@ type Adapter struct {
 	peers func() map[string]services.GatewayRemote
 }
 
-func NewAdapter(
+func newAdapter(
 	ctx context.Context,
 
 	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error),
@@ -63,8 +63,8 @@ func NewAdapter(
 	oidcIssuer,
 	oidcClientID,
 	oidcRedirectURL string,
-) *Adapter {
-	return &Adapter{
+) *adapter {
+	return &adapter{
 		ctx,
 
 		onRequestCallCallback,
@@ -102,11 +102,11 @@ func NewAdapter(
 	}
 }
 
-func (a *Adapter) Login() error {
+func (a *adapter) login() error {
 	return a.tm.InitialLogin()
 }
 
-func (a *Adapter) Link() error {
+func (a *adapter) link() error {
 	errs := make(chan error)
 
 	l := services.NewAdapter(
@@ -204,9 +204,9 @@ func (a *Adapter) Link() error {
 	return <-errs
 }
 
-func (a *Adapter) RequestCall(email, channelID string) (bool, error) {
+func (a *adapter) requestCall(email, channelID string) (bool, error) {
 	if a.peers == nil {
-		return false, ErrNotReady
+		return false, errNotReady
 	}
 
 	for _, peer := range a.peers() {
@@ -228,12 +228,12 @@ func (a *Adapter) RequestCall(email, channelID string) (bool, error) {
 		return requestCallResult.Accept, nil
 	}
 
-	return false, ErrNoPeersConnected
+	return false, errNoPeersConnected
 }
 
-func (a *Adapter) HangupCall(routeID string) error {
+func (a *adapter) hangupCall(routeID string) error {
 	if a.peers == nil {
-		return ErrNotReady
+		return errNotReady
 	}
 
 	for _, peer := range a.peers() {
@@ -245,5 +245,5 @@ func (a *Adapter) HangupCall(routeID string) error {
 		return peer.HangupCall(a.ctx, token, routeID)
 	}
 
-	return ErrNoPeersConnected
+	return errNoPeersConnected
 }

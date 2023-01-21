@@ -1,4 +1,4 @@
-#include "adapter.h"
+#include "libsaltpanelo_bridge.h"
 #include <stdlib.h>
 
 struct SaltpaneloOnRequestCallResponse

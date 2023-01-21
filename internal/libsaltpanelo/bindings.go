@@ -1,7 +1,7 @@
 package main
 
 /*
-#include "adapter.h"
+#include "libsaltpanelo_bridge.h"
 */
 import "C"
 
@@ -12,7 +12,6 @@ import (
 	"errors"
 
 	"github.com/mattn/go-pointer"
-	"github.com/pojntfx/saltpanelo/internal/backends"
 )
 
 type CString = *C.char
@@ -49,7 +48,7 @@ func SaltpaneloNewAdapter(
 	oidcRedirectURL CString,
 ) unsafe.Pointer {
 	return pointer.Save(
-		backends.NewAdapter(
+		newAdapter(
 			context.Background(),
 
 			func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error) {
@@ -107,8 +106,8 @@ func SaltpaneloNewAdapter(
 }
 
 //export SaltpaneloAdapterLogin
-func SaltpaneloAdapterLogin(adapter unsafe.Pointer) CError {
-	err := (pointer.Restore(adapter)).(*backends.Adapter).Login()
+func SaltpaneloAdapterLogin(a unsafe.Pointer) CError {
+	err := (pointer.Restore(a)).(*adapter).login()
 	if err != nil {
 		return C.CString(err.Error())
 	}
@@ -117,8 +116,8 @@ func SaltpaneloAdapterLogin(adapter unsafe.Pointer) CError {
 }
 
 //export SaltpaneloAdapterLink
-func SaltpaneloAdapterLink(adapter unsafe.Pointer) CError {
-	err := (pointer.Restore(adapter)).(*backends.Adapter).Link()
+func SaltpaneloAdapterLink(a unsafe.Pointer) CError {
+	err := (pointer.Restore(a)).(*adapter).link()
 	if err != nil {
 		return C.CString(err.Error())
 	}
@@ -127,8 +126,8 @@ func SaltpaneloAdapterLink(adapter unsafe.Pointer) CError {
 }
 
 //export SaltpaneloAdapterRequestCall
-func SaltpaneloAdapterRequestCall(adapter unsafe.Pointer, email, channelID CString) (CBool, CError) {
-	accept, err := (pointer.Restore(adapter)).(*backends.Adapter).RequestCall(C.GoString(email), C.GoString(channelID))
+func SaltpaneloAdapterRequestCall(a unsafe.Pointer, email, channelID CString) (CBool, CError) {
+	accept, err := (pointer.Restore(a)).(*adapter).requestCall(C.GoString(email), C.GoString(channelID))
 	if err != nil {
 		return CBoolFalse, C.CString(err.Error())
 	}
@@ -141,8 +140,8 @@ func SaltpaneloAdapterRequestCall(adapter unsafe.Pointer, email, channelID CStri
 }
 
 //export SaltpaneloAdapterHangupCall
-func SaltpaneloAdapterHangupCall(adapter unsafe.Pointer, routeID CString) CError {
-	err := (pointer.Restore(adapter)).(*backends.Adapter).HangupCall(C.GoString(routeID))
+func SaltpaneloAdapterHangupCall(a unsafe.Pointer, routeID CString) CError {
+	err := (pointer.Restore(a)).(*adapter).hangupCall(C.GoString(routeID))
 	if err != nil {
 		return C.CString(err.Error())
 	}
