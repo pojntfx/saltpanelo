@@ -1,5 +1,7 @@
 # saltpanelo
 
+![Logo](./docs/logo-readme.png)
+
 Fast, smart and secure service mesh.
 
 ## Overview
