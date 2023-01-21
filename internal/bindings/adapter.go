@@ -140,4 +140,14 @@ func SaltpaneloAdapterRequestCall(adapter unsafe.Pointer, email, channelID CStri
 	return CBoolFalse, C.CString("")
 }
 
+//export SaltpaneloAdapterHangupCall
+func SaltpaneloAdapterHangupCall(adapter unsafe.Pointer, routeID CString) CError {
+	err := (pointer.Restore(adapter)).(*backends.Adapter).HangupCall(C.GoString(routeID))
+	if err != nil {
+		return C.CString(err.Error())
+	}
+
+	return C.CString("")
+}
+
 func main() {}

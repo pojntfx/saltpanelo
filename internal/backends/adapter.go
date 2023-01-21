@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	ErrNotReady = errors.New("adapter not ready")
+	ErrNotReady         = errors.New("adapter not ready")
+	ErrNoPeersConnected = errors.New("no peers connected")
 )
 
 type Adapter struct {
@@ -203,5 +204,22 @@ func (a *Adapter) RequestCall(email, channelID string) (bool, error) {
 		return requestCallResult.Accept, nil
 	}
 
-	return true, nil
+	return false, ErrNoPeersConnected
+}
+
+func (a *Adapter) HangupCall(routeID string) error {
+	if a.peers == nil {
+		return ErrNotReady
+	}
+
+	for _, peer := range a.peers() {
+		token, err := a.tm.GetIDToken()
+		if err != nil {
+			return err
+		}
+
+		return peer.HangupCall(a.ctx, token, routeID)
+	}
+
+	return ErrNoPeersConnected
 }
