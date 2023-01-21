@@ -1,5 +1,4 @@
 #include "libsaltpanelo.h"
-#include <callback.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -19,76 +18,54 @@ void *handle_adapter_link(void *adapter) {
 
 struct example_external_data {};
 
-void on_request_call_handler(void *ptr, struct vacall_alist *alist) {
-  struct example_external_data *example_data = ptr;
-
-  char *src_id = va_arg_ptr(alist, char *);
-  char *src_email = va_arg_ptr(alist, char *);
-  char *route_id = va_arg_ptr(alist, char *);
-  char *channel_id = va_arg_ptr(alist, char *);
-
-  struct SaltpaneloOnRequestCallResponse *rv =
-      va_arg_ptr(alist, struct SaltpaneloOnRequestCallResponse *);
+struct SaltpaneloOnRequestCallResponse
+on_request_call_handler(char *src_id, char *src_email, char *route_id,
+                        char *channel_id, void *userdata) {
+  struct example_external_data *example_data = userdata;
 
   printf("Call with src ID %s, src email %s, route ID %s and channel ID %s "
          "requested and accepted\n",
          src_id, src_email, route_id, channel_id);
 
-  rv->Accept = true;
-  rv->Err = "";
+  struct SaltpaneloOnRequestCallResponse rv = {.Accept = true, .Err = ""};
+
+  return rv;
 }
 
-void on_call_disconnected_handler(void *ptr, struct vacall_alist *alist) {
-  struct example_external_data *example_data = ptr;
-
-  char *route_id = va_arg_ptr(alist, char *);
-  char **rv = va_arg_ptr(alist, char **);
+char *on_call_disconnected_handler(char *route_id, void *userdata) {
+  struct example_external_data *example_data = userdata;
 
   printf("Call with route ID %s disconnected\n", route_id);
 
-  *rv = "";
+  return "";
 }
 
-void on_handle_call_handler(void *ptr, struct vacall_alist *alist) {
-  struct example_external_data *example_data = ptr;
-
-  char *route_id = va_arg_ptr(alist, char *);
-  char *raddr = va_arg_ptr(alist, char *);
-  char **rv = va_arg_ptr(alist, char **);
+char *on_handle_call_handler(char *route_id, char *raddr, void *userdata) {
+  struct example_external_data *example_data = userdata;
 
   printf("Call with route ID %s and remote address %s started\n", route_id,
          raddr);
 
-  *rv = "";
+  return "";
 }
 
-void open_url_handler(void *ptr, struct vacall_alist *alist) {
-  struct example_external_data *example_data = ptr;
-
-  char *url = va_arg_ptr(alist, char *);
-  char **rv = va_arg_ptr(alist, char **);
+char *open_url_handler(char *url, void *userdata) {
+  struct example_external_data *example_data = userdata;
 
   printf("Open the following URL in your browser: %s\n", url);
 
-  *rv = "";
+  return "";
 }
 
 int main() {
   struct example_external_data example_data = {};
 
-  void *handle_on_request_call =
-      alloc_callback(&on_request_call_handler, &example_data);
-  void *handle_on_call_disconnected =
-      alloc_callback(&on_call_disconnected_handler, &example_data);
-  void *handle_on_handle_call =
-      alloc_callback(&on_handle_call_handler, &example_data);
-  void *handle_open_url = alloc_callback(&open_url_handler, &example_data);
-
   void *adapter = SaltpaneloNewAdapter(
-      handle_on_request_call, handle_on_call_disconnected,
-      handle_on_handle_call, handle_open_url, "ws://localhost:1338",
-      "127.0.0.1", false, 10000, "https://pojntfx.eu.auth0.com/",
-      "An94hvwzqxMmFcL8iEpTVrd88zFdhVdl", "http://localhost:11337");
+      &on_request_call_handler, &example_data, &on_call_disconnected_handler,
+      &example_data, &on_handle_call_handler, &example_data, &open_url_handler,
+      &example_data, "ws://localhost:1338", "127.0.0.1", false, 10000,
+      "https://pojntfx.eu.auth0.com/", "An94hvwzqxMmFcL8iEpTVrd88zFdhVdl",
+      "http://localhost:11337");
 
   char *rv = SaltpaneloAdapterLogin(adapter);
   if (strcmp(rv, "") != 0) {

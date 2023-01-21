@@ -3,24 +3,26 @@ struct SaltpaneloOnRequestCallResponse {
   char *Err;
 };
 
-typedef void (*on_request_call)(char *src_id, char *src_email, char *route_id,
-                                char *channel_id,
-                                struct SaltpaneloOnRequestCallResponse *rv);
+typedef struct SaltpaneloOnRequestCallResponse (*on_request_call_callback)(
+    char *src_id, char *src_email, char *route_id, char *channel_id,
+    void *userdata);
 
-typedef void (*on_call_disconnected)(char *route_id, char **rv);
+typedef char *(*on_call_disconnected_callback)(char *route_id, void *userdata);
 
-typedef void (*on_handle_call)(char *route_id, char *raddr, char **rv);
+typedef char *(*on_handle_call_callback)(char *route_id, char *raddr,
+                                         void *userdata);
 
-typedef void (*open_url)(char *url, char **rv);
+typedef char *(*open_url_callback)(char *url, void *userdata);
 
-void bridge_on_request_call(on_request_call f, char *src_id, char *src_email,
-                            char *route_id, char *channel_id,
-                            struct SaltpaneloOnRequestCallResponse *rv);
+struct SaltpaneloOnRequestCallResponse
+bridge_on_request_call(on_request_call_callback f, char *src_id,
+                       char *src_email, char *route_id, char *channel_id,
+                       void *userdata);
 
-void bridge_on_call_disconnected(on_call_disconnected f, char *route_id,
-                                 char **rv);
+char *bridge_on_call_disconnected(on_call_disconnected_callback f,
+                                  char *route_id, void *userdata);
 
-void bridge_on_handle_call(on_handle_call f, char *route_id, char *raddr,
-                           char **rv);
+char *bridge_on_handle_call(on_handle_call_callback f, char *route_id,
+                            char *raddr, void *userdata);
 
-void bridge_open_url(open_url f, char *url, char **rv);
+char *bridge_open_url(open_url_callback f, char *url, void *userdata);

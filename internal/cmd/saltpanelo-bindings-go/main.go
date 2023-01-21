@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"unsafe"
 
 	"github.com/pojntfx/saltpanelo/internal/backends"
 )
@@ -26,26 +27,33 @@ func main() {
 	adapter := backends.NewAdapter(
 		context.Background(),
 
-		func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
+		func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error) {
 			log.Printf("Call with src ID %v, src email %v, route ID %v and channel ID %v requested and accepted", srcID, srcEmail, routeID, channelID)
 
 			return true, nil
 		},
-		func(ctx context.Context, routeID string) error {
+		nil,
+
+		func(ctx context.Context, routeID string, userdata unsafe.Pointer) error {
 			log.Println("Call with route ID", routeID, "disconnected")
 
 			return nil
 		},
-		func(ctx context.Context, routeID, raddr string) error {
+		nil,
+
+		func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error {
 			log.Println("Call with route ID", routeID, "and remote address", raddr, "started")
 
 			return nil
 		},
-		func(url string) error {
+		nil,
+
+		func(url string, userdata unsafe.Pointer) error {
 			log.Println("Open the following URL in your browser:", url)
 
 			return nil
 		},
+		nil,
 
 		*raddr,
 		*ahost,

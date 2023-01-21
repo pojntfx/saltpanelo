@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"time"
+	"unsafe"
 
 	"github.com/pojntfx/dudirekta/pkg/rpc"
 	"github.com/pojntfx/saltpanelo/pkg/auth"
@@ -20,9 +21,14 @@ var (
 type Adapter struct {
 	ctx context.Context
 
-	onRequestCall      func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error)
-	onCallDisconnected func(ctx context.Context, routeID string) error
-	onHandleCall       func(ctx context.Context, routeID, raddr string) error
+	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error)
+	onRequestCallUserdata unsafe.Pointer
+
+	onCallDisconnectedCallback func(ctx context.Context, routeID string, userdata unsafe.Pointer) error
+	onCallDisconnectedUserdata unsafe.Pointer
+
+	onHandleCallCallback func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error
+	onHandleCallUserdata unsafe.Pointer
 
 	raddr,
 	ahost string
@@ -37,10 +43,17 @@ type Adapter struct {
 func NewAdapter(
 	ctx context.Context,
 
-	onRequestCall func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error),
-	onCallDisconnected func(ctx context.Context, routeID string) error,
-	onHandleCall func(ctx context.Context, routeID, raddr string) error,
-	openURL func(url string) error,
+	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error),
+	onRequestCallUserdata unsafe.Pointer,
+
+	onCallDisconnectedCallback func(ctx context.Context, routeID string, userdata unsafe.Pointer) error,
+	onCallDisconnectedUserdata unsafe.Pointer,
+
+	onHandleCallCallback func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error,
+	onHandleCallUserdata unsafe.Pointer,
+
+	openURLCallback func(url string, userdata unsafe.Pointer) error,
+	openURLUserdata unsafe.Pointer,
 
 	raddr,
 	ahost string,
@@ -54,9 +67,14 @@ func NewAdapter(
 	return &Adapter{
 		ctx,
 
-		onRequestCall,
-		onCallDisconnected,
-		onHandleCall,
+		onRequestCallCallback,
+		onRequestCallUserdata,
+
+		onCallDisconnectedCallback,
+		onCallDisconnectedUserdata,
+
+		onHandleCallCallback,
+		onHandleCallUserdata,
 
 		raddr,
 		ahost,
@@ -69,7 +87,7 @@ func NewAdapter(
 			oidcRedirectURL,
 
 			func(s string) error {
-				if err := openURL(s); err != nil {
+				if err := openURLCallback(s, openURLUserdata); err != nil {
 					log.Printf(`Could not open browser, please open the following URL in your browser manually to authorize:
 %v`, s)
 				}
@@ -94,9 +112,15 @@ func (a *Adapter) Link() error {
 	l := services.NewAdapter(
 		a.verbose,
 		a.ahost,
-		a.onRequestCall,
-		a.onCallDisconnected,
-		a.onHandleCall,
+		func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
+			return a.onRequestCallCallback(ctx, srcID, srcEmail, routeID, channelID, a.onRequestCallUserdata)
+		},
+		func(ctx context.Context, routeID string) error {
+			return a.onCallDisconnectedCallback(ctx, routeID, a.onCallDisconnectedUserdata)
+		},
+		func(ctx context.Context, routeID, raddr string) error {
+			return a.onHandleCallCallback(ctx, routeID, raddr, a.onHandleCallUserdata)
+		},
 		a.tm.GetIDToken,
 	)
 	clients := 0

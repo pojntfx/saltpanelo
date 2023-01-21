@@ -27,10 +27,17 @@ const (
 
 //export SaltpaneloNewAdapter
 func SaltpaneloNewAdapter(
-	onRequestCall C.on_request_call,
-	onCallDisconnected C.on_call_disconnected,
-	onHandleCall C.on_handle_call,
-	openURL C.open_url,
+	onRequestCallCallback C.on_request_call_callback,
+	onRequestCallUserdata unsafe.Pointer,
+
+	onCallDisconnectedCallback C.on_call_disconnected_callback,
+	onCallDisconnectedUserdata unsafe.Pointer,
+
+	onHandleCallCallback C.on_handle_call_callback,
+	onHandleCallUserdata unsafe.Pointer,
+
+	openURLCallback C.open_url_callback,
+	openURLUserdata unsafe.Pointer,
 
 	raddr,
 	ahost CString,
@@ -45,10 +52,8 @@ func SaltpaneloNewAdapter(
 		backends.NewAdapter(
 			context.Background(),
 
-			func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
-				rv := C.struct_SaltpaneloOnRequestCallResponse{}
-
-				C.bridge_on_request_call(onRequestCall, C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID), &rv)
+			func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error) {
+				rv := C.bridge_on_request_call(onRequestCallCallback, C.CString(srcID), C.CString(srcEmail), C.CString(routeID), C.CString(channelID), userdata)
 
 				err := C.GoString(rv.Err)
 				if err == "" {
@@ -57,42 +62,37 @@ func SaltpaneloNewAdapter(
 
 				return rv.Accept == CBoolTrue, errors.New(err)
 			},
-			func(ctx context.Context, routeID string) error {
-				rv := C.CString("")
+			onRequestCallUserdata,
 
-				C.bridge_on_call_disconnected(onCallDisconnected, C.CString(routeID), &rv)
-
-				err := C.GoString(rv)
+			func(ctx context.Context, routeID string, userdata unsafe.Pointer) error {
+				err := C.GoString(C.bridge_on_call_disconnected(onCallDisconnectedCallback, C.CString(routeID), userdata))
 				if err == "" {
 					return nil
 				}
 
 				return errors.New(err)
 			},
-			func(ctx context.Context, routeID, raddr string) error {
-				rv := C.CString("")
+			onCallDisconnectedUserdata,
 
-				C.bridge_on_handle_call(onHandleCall, C.CString(routeID), C.CString(raddr), &rv)
-
-				err := C.GoString(rv)
+			func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error {
+				err := C.GoString(C.bridge_on_handle_call(onHandleCallCallback, C.CString(routeID), C.CString(raddr), userdata))
 				if err == "" {
 					return nil
 				}
 
 				return errors.New(err)
 			},
-			func(url string) error {
-				rv := C.CString("")
+			onHandleCallUserdata,
 
-				C.bridge_open_url(openURL, C.CString(url), &rv)
-
-				err := C.GoString(rv)
+			func(url string, userdata unsafe.Pointer) error {
+				err := C.GoString(C.bridge_open_url(openURLCallback, C.CString(url), userdata))
 				if err == "" {
 					return nil
 				}
 
 				return errors.New(err)
 			},
+			openURLUserdata,
 
 			C.GoString(raddr),
 			C.GoString(ahost),
