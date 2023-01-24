@@ -63,8 +63,8 @@ func SaltpaneloNewAdapter(
 			},
 			onRequestCallUserdata,
 
-			func(ctx context.Context, routeID string, userdata unsafe.Pointer) error {
-				err := C.GoString(C.bridge_on_call_disconnected(onCallDisconnectedCallback, C.CString(routeID), userdata))
+			func(ctx context.Context, routeID, channelID string, userdata unsafe.Pointer) error {
+				err := C.GoString(C.bridge_on_call_disconnected(onCallDisconnectedCallback, C.CString(routeID), C.CString(channelID), userdata))
 				if err == "" {
 					return nil
 				}
@@ -73,8 +73,8 @@ func SaltpaneloNewAdapter(
 			},
 			onCallDisconnectedUserdata,
 
-			func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error {
-				err := C.GoString(C.bridge_on_handle_call(onHandleCallCallback, C.CString(routeID), C.CString(raddr), userdata))
+			func(ctx context.Context, routeID, channelID string, raddr string, userdata unsafe.Pointer) error {
+				err := C.GoString(C.bridge_on_handle_call(onHandleCallCallback, C.CString(routeID), C.CString(channelID), C.CString(raddr), userdata))
 				if err == "" {
 					return nil
 				}

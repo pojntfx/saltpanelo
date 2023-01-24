@@ -27,7 +27,8 @@ type AdapterRemote struct {
 	UnprovisionRoute func(ctx context.Context, routeID string) error
 	ProvisionRoute   func(
 		ctx context.Context,
-		routeID string,
+		routeID,
+		channelID,
 		raddr string,
 		cert CertPair,
 	) error
@@ -42,8 +43,8 @@ type Adapter struct {
 	ahost   string
 
 	onRequestCall      func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error)
-	onCallDisconnected func(ctx context.Context, routeID string) error
-	onHandleCall       func(ctx context.Context, routeID, raddr string) error
+	onCallDisconnected func(ctx context.Context, routeID, channelID string) error
+	onHandleCall       func(ctx context.Context, routeID, channelID, raddr string) error
 	getIDToken         func() (string, error)
 
 	routes     map[string]connPair
@@ -59,8 +60,8 @@ func NewAdapter(
 	ahost string,
 
 	onRequestCall func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error),
-	onCallDisconnected func(ctx context.Context, routeID string) error,
-	onHandleCall func(ctx context.Context, routeID, raddr string) error,
+	onCallDisconnected func(ctx context.Context, routeID, channelID string) error,
+	onHandleCall func(ctx context.Context, routeID, channelID, raddr string) error,
 	getIDToken func() (string, error),
 ) *Adapter {
 	return &Adapter{
@@ -181,23 +182,26 @@ func (a *Adapter) UnprovisionRoute(ctx context.Context, routeID string) error {
 
 	delete(a.routes, routeID)
 
-	return a.onCallDisconnected(ctx, routeID)
+	return a.onCallDisconnected(ctx, routeID, route.channelID)
 }
 
 func (a *Adapter) ProvisionRoute(
 	ctx context.Context,
 	routeID string,
+	channelID string,
 	raddr string,
 	cert CertPair,
 ) error {
 	if a.verbose {
-		log.Println("Provisioning route with ID", routeID, "to raddr", raddr)
+		log.Println("Provisioning route with ID", routeID, "and channel ID", channelID, "to raddr", raddr)
 	}
 
 	var src net.Conn
 	var dst net.Conn
 
-	cp := connPair{}
+	cp := connPair{
+		channelID: channelID,
+	}
 
 	ready := make(chan struct{})
 	errs := make(chan error)
@@ -308,5 +312,5 @@ func (a *Adapter) ProvisionRoute(
 	a.routes[routeID] = cp
 	a.routesLock.Unlock()
 
-	return a.onHandleCall(ctx, routeID, lis.Addr().String())
+	return a.onHandleCall(ctx, routeID, cp.channelID, lis.Addr().String())
 }

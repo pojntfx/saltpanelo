@@ -32,19 +32,22 @@ on_request_call_handler(char *src_id, char *src_email, char *route_id,
   return rv;
 }
 
-char *on_call_disconnected_handler(char *route_id, void *userdata) {
+char *on_call_disconnected_handler(char *route_id, char *channel_id,
+                                   void *userdata) {
   struct example_external_data *example_data = userdata;
 
-  printf("Call with route ID %s disconnected\n", route_id);
+  printf("Call with route ID %s and channel ID %s disconnected\n", route_id,
+         channel_id);
 
   return "";
 }
 
-char *on_handle_call_handler(char *route_id, char *raddr, void *userdata) {
+char *on_handle_call_handler(char *route_id, char *channel_id, char *raddr,
+                             void *userdata) {
   struct example_external_data *example_data = userdata;
 
-  printf("Call with route ID %s and remote address %s started\n", route_id,
-         raddr);
+  printf("Call with route ID %s, channel ID %s and remote address %s started\n",
+         route_id, channel_id, raddr);
 
   return "";
 }

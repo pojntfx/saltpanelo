@@ -46,8 +46,9 @@ type ThroughputResult struct {
 }
 
 type connPair struct {
-	src io.Closer
-	dst io.Closer
+	src       io.Closer
+	dst       io.Closer
+	channelID string
 }
 
 type Switch struct {

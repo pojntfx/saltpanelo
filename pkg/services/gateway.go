@@ -369,7 +369,7 @@ func (g *Gateway) RequestCall(ctx context.Context, token string, dstID, channelI
 		return RequestCallResult{}, err
 	}
 
-	if err := g.Router.provisionRoute(remoteID, dstID, routeID); err != nil {
+	if err := g.Router.provisionRoute(remoteID, dstID, routeID, channelID); err != nil {
 		return RequestCallResult{}, err
 	}
 

@@ -358,7 +358,7 @@ func (r *Router) getSwitches() map[string]SwitchMetadata {
 	return a
 }
 
-func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
+func (r *Router) provisionRoute(srcID, dstID, routeID, channelID string) error {
 	if r.verbose {
 		log.Println("Provisioning route from", srcID, "to", dstID, "with route ID", routeID)
 	}
@@ -518,6 +518,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 	if err := dst.ProvisionRoute(
 		context.Background(),
 		routeID,
+		channelID,
 		egressLaddr,
 		CertPair{
 			CertPEM:        adapterDstCertPEM,
@@ -535,6 +536,7 @@ func (r *Router) provisionRoute(srcID, dstID, routeID string) error {
 	if err := src.ProvisionRoute(
 		context.Background(),
 		routeID,
+		channelID,
 		ingressRaddr,
 		CertPair{
 			CertPEM:        adapterSrcCertPEM,

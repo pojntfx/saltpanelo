@@ -24,10 +24,10 @@ type adapter struct {
 	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error)
 	onRequestCallUserdata unsafe.Pointer
 
-	onCallDisconnectedCallback func(ctx context.Context, routeID string, userdata unsafe.Pointer) error
+	onCallDisconnectedCallback func(ctx context.Context, routeID, channelID string, userdata unsafe.Pointer) error
 	onCallDisconnectedUserdata unsafe.Pointer
 
-	onHandleCallCallback func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error
+	onHandleCallCallback func(ctx context.Context, routeID, channelID, raddr string, userdata unsafe.Pointer) error
 	onHandleCallUserdata unsafe.Pointer
 
 	raddr,
@@ -46,10 +46,10 @@ func newAdapter(
 	onRequestCallCallback func(ctx context.Context, srcID, srcEmail, routeID, channelID string, userdata unsafe.Pointer) (bool, error),
 	onRequestCallUserdata unsafe.Pointer,
 
-	onCallDisconnectedCallback func(ctx context.Context, routeID string, userdata unsafe.Pointer) error,
+	onCallDisconnectedCallback func(ctx context.Context, routeID, channelID string, userdata unsafe.Pointer) error,
 	onCallDisconnectedUserdata unsafe.Pointer,
 
-	onHandleCallCallback func(ctx context.Context, routeID, raddr string, userdata unsafe.Pointer) error,
+	onHandleCallCallback func(ctx context.Context, routeID, channelID, raddr string, userdata unsafe.Pointer) error,
 	onHandleCallUserdata unsafe.Pointer,
 
 	openURLCallback func(url string, userdata unsafe.Pointer) error,
@@ -115,11 +115,11 @@ func (a *adapter) link() error {
 		func(ctx context.Context, srcID, srcEmail, routeID, channelID string) (bool, error) {
 			return a.onRequestCallCallback(ctx, srcID, srcEmail, routeID, channelID, a.onRequestCallUserdata)
 		},
-		func(ctx context.Context, routeID string) error {
-			return a.onCallDisconnectedCallback(ctx, routeID, a.onCallDisconnectedUserdata)
+		func(ctx context.Context, routeID, channelID string) error {
+			return a.onCallDisconnectedCallback(ctx, routeID, channelID, a.onCallDisconnectedUserdata)
 		},
-		func(ctx context.Context, routeID, raddr string) error {
-			return a.onHandleCallCallback(ctx, routeID, raddr, a.onHandleCallUserdata)
+		func(ctx context.Context, routeID, channelID, raddr string) error {
+			return a.onHandleCallCallback(ctx, routeID, channelID, raddr, a.onHandleCallUserdata)
 		},
 		a.tm.GetIDToken,
 	)

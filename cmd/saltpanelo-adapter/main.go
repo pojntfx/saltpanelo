@@ -88,20 +88,20 @@ func main() {
 
 			return true, nil
 		},
-		func(ctx context.Context, routeID string) error {
+		func(ctx context.Context, routeID, channelID string) error {
 			go func() {
-				if err := zenity.Info(fmt.Sprintf("Call with route ID %v ended", routeID)); err != nil {
+				if err := zenity.Info(fmt.Sprintf("Call with route ID %v and channel ID %v ended", routeID, channelID)); err != nil {
 					log.Println("Could not display call disconnection message, continuing:", err)
 				}
 			}()
 
 			return nil
 		},
-		func(ctx context.Context, routeID, raddr string) error {
+		func(ctx context.Context, routeID, channelID, raddr string) error {
 			for _, peer := range l.Peers() {
 				go func(peer services.GatewayRemote) {
 					if err := zenity.Question(
-						fmt.Sprintf("Call with route ID %v listening on address %v", routeID, raddr),
+						fmt.Sprintf("Call with route ID %v and channel ID %v listening on address %v", routeID, channelID, raddr),
 						zenity.Title("Ongoing Call"),
 						zenity.QuestionIcon,
 						zenity.OKLabel("Hang Up"),
@@ -117,7 +117,7 @@ func main() {
 					}
 
 					if *verbose {
-						log.Println("Hanging up call with route ID", routeID)
+						log.Println("Hanging up call with route ID", routeID, "and channel ID", channelID)
 					}
 
 					token, err := tm.GetIDToken()
